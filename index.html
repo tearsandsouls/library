@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>그을린 흔적의 서재</title>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<section id="authScreen"><div class="auth-card"><div class="auth-mark">◫</div><h1>그을린 흔적의 서재</h1><p>로그인하고 이야기를 이어 쓰세요.</p><form id="loginForm"><label for="loginEmail">이메일</label><input id="loginEmail" type="email" autocomplete="username" required><label for="loginPassword">비밀번호</label><input id="loginPassword" type="password" autocomplete="current-password" required><button id="loginSubmit" type="submit">로그인</button></form><p id="authMessage" role="status" aria-live="polite"></p></div></section>
+<div id="libraryApp" hidden><div class="cloud-bar"><span id="accountEmail"></span><span id="cloudStatus" role="status">연결 중…</span><button id="cloudRetry" hidden>저장 다시 시도</button><button id="signOut">로그아웃</button></div>
+<section id="homeScreen" class="home-screen">
+<header class="home-top"><div class="brand"><span class="brand-mark">◫</span> 그을린 흔적의 서재</div><nav class="home-nav"><button class="active" id="homeNovelsTab">▦ 작품</button><button id="homeSeriesTab">⋯ 시리즈</button></nav><div class="right"><span>클라우드 서재</span></div></header>
+<main class="library"><div id="novelsHomePanel"><h1>내 작품</h1><p class="lead">당신의 소설 라이브러리입니다. 오늘은 어떤 이야기를 이어갈까요?</p>
+<div class="library-tools"><button class="create-btn" id="createNovelOpen">＋ 새 소설</button><div class="search-tools"><input id="librarySearch" aria-label="작품 검색" placeholder="제목·작가·시리즈 검색"/><select id="librarySort" aria-label="정렬"><option value="date">최근 생성순</option><option value="title">제목순</option></select><select id="libraryGroup" aria-label="그룹"><option value="series">시리즈별</option><option value="all">전체</option></select></div></div>
+<section class="series-section" id="sampleSeriesSection"><div class="series-title"><h2>안개 항구의 편지</h2><span id="sampleSeriesCount">3 books</span></div><div class="book-grid" id="sampleSeriesGrid"><article class="book-card" data-open-novel><div class="book-cover"></div><div class="book-meta"><small>본편</small><b>안개 항구의 편지</b><small>September 8</small></div></article><article class="book-card" data-open-novel><div class="book-cover alt1"></div><div class="book-meta"><small>번외편</small><b>새벽의 기록</b><small>August 21</small></div></article><article class="book-card" data-open-novel><div class="book-cover alt2"></div><div class="book-meta"><small>번외편</small><b>항구의 뒷이야기</b><small>August 21</small></div></article></div></section>
+<div id="dynamicSeriesGroups"></div><section id="noSeriesSection"><div class="series-title"><h2>시리즈 없음</h2><span id="noSeriesCount">1 book</span></div><div class="book-grid" id="noSeriesGrid"><article class="book-card" data-open-novel><div class="book-cover alt3"></div><div class="book-meta"><small></small><b>새 소설</b><small>August 21</small></div></article></div></section><div class="home-foot">그을린 흔적의 서재 · Cloud</div>
+</div>
+<div id="seriesHomePanel" class="series-home-panel hidden">
+  <div class="series-page-heading">
+    <h1>내 시리즈</h1>
+    <p>시리즈를 만들고 관리할 수 있습니다.</p>
+  </div>
+  <div class="series-manager-box">
+    <div class="series-select-wrap">
+      <select id="seriesManagerSelect"></select>
+      <span class="series-chevron">⌄</span>
+    </div>
+    <button type="button" id="newSeriesOpen" class="new-series-btn">＋ 새 시리즈</button>
+  </div>
+  <div id="seriesManagerInfo" class="series-manager-info"></div>
+</div>
+</main></section>
+
+
+
+<div id="newSeriesBackdrop" class="new-series-backdrop hidden" role="dialog" aria-modal="true">
+  <div class="new-series-modal">
+    <div class="new-series-title">새 시리즈 제목을 입력하세요</div>
+    <input type="text" id="newSeriesNameInput" autocomplete="off" placeholder="시리즈 제목 입력">
+    <div class="new-series-actions">
+      <button type="button" id="newSeriesCancel">취소</button>
+      <button type="button" id="newSeriesSubmit" class="primary">확인</button>
+    </div>
+  </div>
+</div>
+
+<div id="createNovelBackdrop" class="create-novel-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="createNovelHeading">
+  <div class="create-novel-modal">
+    <div class="create-novel-head">
+      <div>
+        <div class="create-novel-kicker">소설 정보</div>
+        <h2 id="createNovelHeading">새 소설</h2>
+      </div>
+      <button type="button" id="createNovelClose" class="create-novel-close" aria-label="닫기">×</button>
+    </div>
+
+    <div class="create-novel-form">
+      <label>제목</label>
+      <input id="createNovelTitle" type="text" value="새 소설" autocomplete="off">
+
+      <label>작가명 / 필명</label>
+      <input id="createNovelAuthor" type="text" placeholder="필명" autocomplete="off">
+
+      <div class="create-novel-series-row">
+        <div>
+          <label>시리즈 <span>(선택)</span></label>
+          <select id="createNovelSeries">
+            <option value="">시리즈 없음</option>
+            <option value="안개 항구의 편지">안개 항구의 편지</option>
+          </select>
+          <input id="createNovelNewSeries" class="hidden" type="text" placeholder="새 시리즈 이름">
+        </div>
+        <button type="button" id="createNovelNewSeriesBtn" class="series-new-btn">New Series</button>
+        <div>
+          <label>시리즈 순서</label>
+          <input id="createNovelSeriesIndex" type="text" placeholder="예: 1권">
+        </div>
+      </div>
+    </div>
+
+    <div class="create-novel-actions">
+      <button type="button" id="createNovelCancel">취소</button>
+      <button type="button" id="createNovelSubmit" class="create-novel-submit">▤ 새 소설 만들기</button>
+    </div>
+  </div>
+</div>
+
+<section id="novelScreen" class="novel-screen">
+<div class="app">
+<header class="top">
+  <div class="top-left-shell">
+    <button id="homeBackNew" class="top-circle-btn" title="홈으로" aria-label="홈으로">←</button>
+    <button id="novelSettingsBtn" class="top-circle-btn dark" title="설정" aria-label="설정">⚙</button>
+    <div class="top-cover"></div>
+    <div class="title">
+      <b>안개 항구의 편지</b>
+      <span>안개 항구의 편지 · 본편</span>
+    </div>
+    <div class="top-side-actions">
+      <button class="top-ghost-btn" type="button" aria-label="설정집 접기·펼치기" title="설정집 접기·펼치기">↤</button>
+      <button class="top-ghost-btn compact" type="button" aria-label="집필 집중 모드" title="집필 집중 모드">Ⅱ</button>
+    </div>
+  </div>
+  <nav class="nav"><button class="active" data-view="episodes">▤ Info</button><button data-view="plan">▦ Plan</button><button data-view="write">✎ Write</button><button data-view="gallery">▧ Gallery</button></nav>
+  <div class="write-nav-wrap" id="writeNavWrap">
+    <button type="button" class="write-nav-trigger" id="writeNavTrigger" aria-haspopup="true" aria-expanded="false">
+      <div class="write-nav-trigger-main"><div class="write-nav-primary" id="writeNavPrimary">회차 선택</div><div class="write-nav-secondary" id="writeNavSecondary"></div></div>
+      <div class="write-nav-chevron">⌄</div>
+    </button>
+    <div class="write-chapter-menu hidden" id="writeChapterMenu"></div>
+  </div>
+  <div class="spacer"></div>
+  <span role="status" aria-live="polite" id="saveState" style="font-size:11px;color:#777">● 저장됨</span>
+</header>
+<div class="layout">
+<aside class="side side-v45">
+  <div class="side-tabs-v45">
+    <button class="active" type="button"><span>▦</span> Codex</button>
+    <button type="button"><span>❐</span> Snippets</button>
+  </div>
+
+  <div class="side-search-v45">
+    <div class="side-search-field-v45">
+      <input id="sideSearchInputV45" placeholder="Search all entries...">
+      
+    </div>
+    
+  </div>
+
+  <div class="side-counts-v45">
+    <button class="active" type="button">All <span>11</span></button>
+    <button type="button">Book <span>1</span></button>
+    <button type="button">Series <span>10</span></button>
+  </div>
+
+  <div class="side-scroll-v45"></div>
+<div id="snippetPanel" class="hidden"><label for="snippetText">이 작품의 메모</label><textarea id="snippetText" placeholder="아이디어와 메모를 남겨보세요."></textarea></div></aside>
+<main class="main"><div class="toolbar" id="planToolbar"><div class="modes"><button class="active" data-mode="grid">▦ Grid</button><button data-mode="matrix">▤ Matrix</button><button data-mode="outline">☰ Outline</button><button data-mode="timeline">⌛ Timeline</button></div><input id="sceneSearch" placeholder="Search scenes..." /></div>
+<div class="content"><section id="episodesView" class="episodes-view">
+  <div class="novel-hero">
+    <div class="novel-hero-copy">
+      <div class="novel-kicker">본편 · 장편 웹소설</div>
+      <h1>[본편] 안개 항구의 편지</h1>
+      <div class="novel-intro"><p>당신의 이야기를 써 내려가세요.</p></div>
+<div class="novel-tags"><span class="novel-tag">현대물</span><span class="novel-tag">관계 중심</span><span class="novel-tag">장편</span></div>
+    </div>
+    <div class="novel-cover-large" aria-label="소설 썸네일"></div>
+  </div>
+  <div class="episode-browser">
+    <div class="episode-browser-top">
+      <h2>에피소드</h2>
+      <input id="episodeSearch" class="episode-search" placeholder="회차 검색...">
+      <div class="episode-view-toggle">
+        <button class="active" data-episode-view="list">☰ 리스트</button>
+        <button data-episode-view="card">▦ 카드</button>
+      </div>
+    </div>
+    <div id="episodeListView"></div>
+    <div id="episodeCardView" class="hidden"></div>
+  </div>
+</section><section id="planView" class="hidden"><div id="gridMode"></div><div id="matrixMode" class="hidden"></div><div id="outlineMode" class="hidden"></div><div id="timelineMode" class="hidden"></div></section><section id="galleryView" class="hidden"><div class="gallery-head"><div><h2>삽화 갤러리</h2><p>작품에 사용한 사진·GIF·동영상을 에피소드별로 모아봅니다.</p></div><div class="gallery-filter"><select id="galleryEpisode"><option value="all">전체 에피소드</option></select></div></div><div id="galleryGrid" class="gallery-groups"></div></section><section id="writeView" class="hidden"><div class="write"><div class="stack" id="writeStack"></div><aside class="info"><h3>Scene Info</h3><div class="info-form" id="infoForm"></div></aside></div></section></div>
+</main></div></div></section>
+
+
+<div id="dupModalBackdrop" class="dup-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="dupModalTitle"><div class="dup-modal"><div class="dup-modal-head"><h3 id="dupModalTitle">이미 사용한 이미지예요 <span class="dup-badge">중복</span></h3><p>같은 이미지 파일이 작품 안에 이미 들어가 있습니다.</p></div><div class="dup-preview"><img id="dupPreview" alt="중복 이미지 미리보기"></div><div class="dup-location"><b id="dupLocationTitle"></b><span id="dupLocationMeta"></span><br><button type="button" id="dupGoLink">↗ 해당 회차로 이동</button></div><div class="dup-actions"><button type="button" id="dupCancel">취소</button><button type="button" id="dupInsertAnyway" class="warn">그래도 삽입</button><button type="button" id="dupGo" class="primary">기존 위치로 이동</button></div></div></div>
+
+<div id="promptModalBackdrop" class="prompt-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="promptModalTitle">
+  <div class="prompt-modal">
+    <div class="prompt-modal-head"><h3 id="promptModalTitle">AI 생성 프롬프트</h3><button type="button" class="modal-close" id="promptModalClose" aria-label="닫기">×</button></div>
+    <div class="prompt-preview"><img id="promptPreviewImage" alt="프롬프트를 저장할 이미지"></div>
+    <div class="prompt-body"><label for="promptText">이 이미지를 생성할 때 사용한 프롬프트</label><textarea id="promptText" placeholder="AI 이미지 생성 프롬프트를 저장하세요."></textarea></div>
+    <div class="prompt-actions"><button type="button" id="promptDelete" class="danger">이미지 삭제</button><button type="button" id="promptCancel">취소</button><button type="button" id="promptSave" class="primary">저장</button></div>
+  </div>
+</div>
+<div id="galleryPreviewBackdrop" class="gallery-preview-backdrop hidden" role="dialog" aria-modal="true">
+  <div class="gallery-preview-modal">
+    <button type="button" class="gallery-preview-close" id="galleryPreviewClose" aria-label="닫기">×</button>
+    <div class="gallery-preview-image-wrap"><img id="galleryPreviewImage" alt="원본 이미지"></div>
+    <div class="gallery-preview-prompt" id="galleryPreviewPrompt"></div>
+    <div class="gallery-preview-actions">
+      <button type="button" id="galleryPreviewDelete" class="gallery-preview-delete">삭제</button>
+    </div>
+  </div>
+</div>
+</div><script src="assets/js/config.js"></script><script src="assets/js/cloud-store.js"></script><script type="module" src="assets/js/bootstrap.js"></script>
+</body>
+</html>
