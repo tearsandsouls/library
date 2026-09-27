@@ -57,11 +57,13 @@
     </div>
 
     <div class="create-novel-form">
+      <div id="novelCoverFields" hidden>
       <label for="createNovelCover">표지 썸네일 <span>(선택)</span></label>
       <div class="cover-picker">
         <img id="createNovelCoverPreview" hidden alt="선택한 표지 미리보기">
         <div><input id="createNovelCover" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif">
         <p>이미지 최대 10MB · 세로형 표지 권장</p><button type="button" id="createNovelCoverClear">선택 취소</button></div>
+      </div>
       </div>
       <p id="createNovelError" role="alert"></p>
       <label>제목</label>
