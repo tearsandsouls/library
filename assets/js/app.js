@@ -626,7 +626,7 @@ function setCreatingNovel(value){
   createNovelSubmit.textContent=value?'저장 중…':editingNovelId?'저장':'새 소설 만들기';
 }
 function openCreateNovelModal(){
-  resetCoverSelection();editingNovelId=null;$('#createNovelHeading').textContent='새 소설';$('#createNovelSubmit').textContent='새 소설 만들기';
+  resetCoverSelection();$('#novelCoverFields').hidden=true;editingNovelId=null;$('#createNovelHeading').textContent='새 소설';$('#createNovelSubmit').textContent='새 소설 만들기';
   $('#createNovelTitle').value='새 소설';$('#createNovelAuthor').value='';$('#createNovelSeriesIndex').value='';
   if(typeof refreshSeriesLists==='function')refreshSeriesLists();
   createNovelBackdrop.classList.remove('hidden');
@@ -789,7 +789,7 @@ $('#librarySort').addEventListener('change',renderCreatedNovels);
 $('#libraryGroup').addEventListener('change',renderCreatedNovels);
 $('#novelSettingsBtn').addEventListener('click',()=>{
   const n=allNovels().find(n=>n.id===activeNovelId);if(!n)return;
-  openCreateNovelModal();editingNovelId=n.id;$('#createNovelHeading').textContent='소설 정보 수정';$('#createNovelSubmit').textContent='저장';
+  openCreateNovelModal();$('#novelCoverFields').hidden=false;editingNovelId=n.id;$('#createNovelHeading').textContent='소설 정보 수정';$('#createNovelSubmit').textContent='저장';
   $('#createNovelTitle').value=n.title;$('#createNovelAuthor').value=n.author||'';$('#createNovelSeries').value=n.series||'';$('#createNovelSeriesIndex').value=n.seriesIndex||'';
 });
 $('#sideSearchInputV45').addEventListener('input',renderSidebar);
