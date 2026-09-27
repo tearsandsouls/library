@@ -566,6 +566,7 @@ function renderCreatedNovels(){
   const entries=[...groups.entries()].sort((a,b)=>(a[0]==='시리즈 없음')-(b[0]==='시리즈 없음'));
   $('#sampleSeriesSection').classList.add('hidden');$('#noSeriesSection').classList.add('hidden');
   $('#dynamicSeriesGroups').innerHTML=entries.map(([name,novels])=>`<section class="series-section"><div class="series-title"><h2>${escapeHtml(name)}</h2><span>${novels.length}권</span></div><div class="book-grid">${novels.map((n,i)=>`<article class="book-card created-book-card" tabindex="0" role="button" data-novel-id="${escapeAttr(n.id)}" aria-label="${escapeAttr(n.title)} 열기"><div class="book-cover alt${i%4}"></div><div class="book-meta"><small>${escapeHtml(n.seriesIndex||'')}</small><b>${escapeHtml(n.title)}</b><small>${escapeHtml(n.author||'')}</small></div></article>`).join('')}</div></section>`).join('')||'<p class="empty-message">검색 결과가 없습니다.</p>';
+  $$('[data-novel-id]').forEach(card=>{applyCover(card.querySelector('.book-cover'),items.find(n=>n.id===card.dataset.novelId)?.coverKey);});
   $$('[data-novel-id]').forEach(card=>{card.addEventListener('click',()=>openNovel(card.dataset.novelId));card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openNovel(card.dataset.novelId)}})});
 }
 const originalIntro='';
@@ -573,6 +574,7 @@ function renderNovelIdentity(){
   const n=allNovels().find(n=>n.id===activeNovelId)||sampleNovels[0];
   $('#novelScreen .title b').textContent=n.title;$('#novelScreen .title span').textContent=[n.series,n.seriesIndex,n.author].filter(Boolean).join(' · ')||'시리즈 없음';
   $('.novel-hero h1').textContent=n.title;$('.novel-kicker').textContent=[n.series,n.seriesIndex,n.author].filter(Boolean).join(' · ')||'새로운 이야기';
+  applyCover($('.top-cover'),n.coverKey);applyCover($('.novel-cover-large'),n.coverKey);
   $('.novel-intro').textContent=state.description||'당신의 이야기를 써 내려가세요.';
   $('.novel-tags').classList.toggle('hidden',activeNovelId!=='legacy');document.title=n.title+' · 그을린 흔적의 서재';
 }
@@ -595,9 +597,36 @@ const createNovelNewSeriesBtn=document.getElementById('createNovelNewSeriesBtn')
 const createNovelNewSeries=document.getElementById('createNovelNewSeries');
 const createNovelSeries=document.getElementById('createNovelSeries');
 
-let editingNovelId=null;
+const coverUrls=new Map();
+async function applyCover(element,key){
+  element.dataset.coverKey=key||'';element.style.backgroundImage='';
+  if(!key)return;
+  try{
+    if(!coverUrls.has(key))coverUrls.set(key,window.libraryCloud.getMedia(key).then(blob=>URL.createObjectURL(blob)).catch(error=>{coverUrls.delete(key);throw error}));
+    const url=await coverUrls.get(key);
+    if(element.dataset.coverKey===key){element.style.backgroundImage=`url("${url}")`;element.style.backgroundSize='cover';element.style.backgroundPosition='center';}
+  }catch(error){console.error('표지를 불러오지 못했습니다.',error)}
+}
+let editingNovelId=null,coverFile=null,coverPreviewUrl=null,uploadedCoverKey=null,creatingNovel=false;
+function resetCoverSelection(){
+  if(coverPreviewUrl)URL.revokeObjectURL(coverPreviewUrl);
+  coverPreviewUrl=null;coverFile=null;uploadedCoverKey=null;
+  $('#createNovelCover').value='';$('#createNovelCoverPreview').hidden=true;$('#createNovelCoverPreview').removeAttribute('src');$('#createNovelError').textContent='';
+}
+$('#createNovelCover').addEventListener('change',async e=>{
+  const file=e.target.files[0];resetCoverSelection();if(!file)return;
+  if(!['image/jpeg','image/png','image/webp','image/gif','image/avif'].includes(file.type)||file.size>10*1024*1024){$('#createNovelError').textContent='10MB 이하의 JPG, PNG, WebP, GIF, AVIF 이미지를 선택해 주세요.';return}
+  coverFile=file;coverPreviewUrl=URL.createObjectURL(file);$('#createNovelCoverPreview').src=coverPreviewUrl;$('#createNovelCoverPreview').hidden=false;
+});
+$('#createNovelCoverPreview').addEventListener('error',()=>{resetCoverSelection();$('#createNovelError').textContent='읽을 수 없는 이미지입니다. 다른 파일을 선택해 주세요.'});
+$('#createNovelCoverClear').addEventListener('click',resetCoverSelection);
+function setCreatingNovel(value){
+  creatingNovel=value;
+  createNovelBackdrop.querySelectorAll('input,select,button').forEach(el=>el.disabled=value);
+  createNovelSubmit.textContent=value?'저장 중…':editingNovelId?'저장':'새 소설 만들기';
+}
 function openCreateNovelModal(){
-  editingNovelId=null;$('#createNovelHeading').textContent='새 소설';$('#createNovelSubmit').textContent='새 소설 만들기';
+  resetCoverSelection();editingNovelId=null;$('#createNovelHeading').textContent='새 소설';$('#createNovelSubmit').textContent='새 소설 만들기';
   $('#createNovelTitle').value='새 소설';$('#createNovelAuthor').value='';$('#createNovelSeriesIndex').value='';
   if(typeof refreshSeriesLists==='function')refreshSeriesLists();
   createNovelBackdrop.classList.remove('hidden');
@@ -605,6 +634,7 @@ function openCreateNovelModal(){
   document.getElementById('createNovelTitle').select();
 }
 function closeCreateNovelModal(){
+  if(creatingNovel)return;resetCoverSelection();
   createNovelBackdrop.classList.add('hidden');
 }
 createNovelOpen?.addEventListener('click',openCreateNovelModal);
@@ -618,7 +648,8 @@ createNovelNewSeriesBtn?.addEventListener('click',()=>{
   createNovelNewSeries.classList.toggle('hidden');
   if(!createNovelNewSeries.classList.contains('hidden'))createNovelNewSeries.focus();
 });
-createNovelSubmit?.addEventListener('click',()=>{
+createNovelSubmit?.addEventListener('click',async()=>{
+  if(creatingNovel)return;
   try{
   const title=document.getElementById('createNovelTitle').value.trim();
   const author=document.getElementById('createNovelAuthor').value.trim();
@@ -629,16 +660,20 @@ createNovelSubmit?.addEventListener('click',()=>{
     document.getElementById('createNovelTitle').focus();
     return;
   }
+  setCreatingNovel(true);$('#createNovelError').textContent='';
+  if(coverFile&&!uploadedCoverKey){const key='cover_'+crypto.randomUUID();await window.libraryCloud.putMedia(key,coverFile);uploadedCoverKey=key;}
   const items=loadCreatedNovels();
-  const newNovel={id:'novel_'+crypto.randomUUID(),title,author,series,seriesIndex,createdAt:Date.now()};
+  const newNovel={id:'novel_'+crypto.randomUUID(),title,author,series,seriesIndex,createdAt:Date.now(),...(uploadedCoverKey?{coverKey:uploadedCoverKey}:{})};
   if(editingNovelId){
     if(sampleNovels.some(n=>n.id===editingNovelId)){const overrides=JSON.parse(localStorage.getItem('storyloom_sample_metadata_v2')||'{}');overrides[editingNovelId]={title,author,series,seriesIndex};localStorage.setItem('storyloom_sample_metadata_v2',JSON.stringify(overrides))}
-    else{const item=items.find(n=>n.id===editingNovelId);Object.assign(item,{title,author,series,seriesIndex})}
+    else{const item=items.find(n=>n.id===editingNovelId);Object.assign(item,{title,author,series,seriesIndex,...(uploadedCoverKey?{coverKey:uploadedCoverKey}:{})})}
   }else items.push(newNovel);
   saveCreatedNovels(items);
+  if(!editingNovelId)editingNovelId=newNovel.id;
+  await window.libraryCloud.flush();
   renderCreatedNovels();
-  if(editingNovelId)renderNovelIdentity();
-  closeCreateNovelModal();
+  if(editingNovelId===activeNovelId)renderNovelIdentity();
+  setCreatingNovel(false);closeCreateNovelModal();
 
   document.getElementById('createNovelTitle').value='새 소설';
   document.getElementById('createNovelAuthor').value='';
@@ -646,7 +681,8 @@ createNovelSubmit?.addEventListener('click',()=>{
   document.getElementById('createNovelNewSeries').value='';
   document.getElementById('createNovelNewSeries').classList.add('hidden');
   document.getElementById('createNovelSeries').value='';
-  }catch(e){alert('저장하지 못했습니다. 기존 데이터와 저장 공간을 확인해 주세요.')}
+  }catch(e){$('#createNovelError').textContent='저장하지 못했습니다. '+(e.message||'다시 시도해 주세요.');}
+  finally{setCreatingNovel(false)}
 });
 renderCreatedNovels();
 
