@@ -57,7 +57,7 @@ function openNovel(id=DEFAULT_NOVEL_ID){
   renderNovelIdentity();renderSidebar();renderAll();switchView('episodes');
   $('#saveState').textContent=storageBlocked?'저장 데이터를 읽지 못했습니다 · 덮어쓰기 중지':(window.libraryCloud.unsaved?'클라우드에 저장 중…':'● 클라우드 저장됨');
 }
-function openHome(){if(mediaBusy){alert('미디어 저장이 끝난 뒤 이동해 주세요.');return}if(!flushSave())return;observer?.disconnect();novel.classList.remove('open');home.classList.remove('hidden-screen');history.replaceState(null,'',location.pathname+location.search);renderCreatedNovels();window.scrollTo(0,0)}
+function openHome(){if(!leaveNovelSettings('home'))return;if(mediaBusy){alert('미디어 저장이 끝난 뒤 이동해 주세요.');return}if(!flushSave())return;observer?.disconnect();novel.classList.remove('open');home.classList.remove('hidden-screen');history.replaceState(null,'',location.pathname+location.search);renderCreatedNovels();window.scrollTo(0,0)}
 (document.getElementById('homeBackNew')||document.getElementById('homeBack'))?.addEventListener('click',openHome);
 function charById(id){return state.characters.find(c=>c.id===id)}
 function ageAt(charId,year){const c=charById(charId);if(!c||c.baseAge==null)return null;return c.baseAge+(Number(year)-Number(state.baseYear))}
@@ -472,7 +472,11 @@ function toggleWriteChapterMenu(){
   if($('#writeChapterMenu').classList.contains('hidden')) openWriteChapterMenu(); else closeWriteChapterMenu();
 }
 function switchView(view){
-  if(!flushSave())return;
+  if(!leaveNovelSettings(view)||!flushSave())return;
+  novel.classList.toggle('settings-open',view==='settings');
+  $('#novelSettingsView').classList.toggle('hidden',view!=='settings');
+  $('#novelSettingsBtn').setAttribute('aria-pressed',String(view==='settings'));
+  if(view==='settings')renderNovelSettings();
   $$('[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===view));
   const isEpisodes=view==='episodes',isWrite=view==='write',isGallery=view==='gallery',isPlan=view==='plan';
   $('#episodesView').classList.toggle('hidden',!isEpisodes);
@@ -485,7 +489,7 @@ function switchView(view){
   if(isEpisodes)renderEpisodesBrowser();
   else if(isWrite){renderWriteChapter(currentChapterId,currentSceneId);renderWriteChapterMenu();updateWriteNavLabel()}
   else if(isGallery)renderGallery();
-  else{renderAllPlan();setActiveMode(currentMode)}
+  else if(isPlan){renderAllPlan();setActiveMode(currentMode)}
 }
 $$('[data-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
 $$('[data-episode-view]').forEach(b=>b.addEventListener('click',()=>setEpisodeBrowserView(b.dataset.episodeView)));
@@ -787,11 +791,65 @@ refreshSeriesLists();
 $('#librarySearch').addEventListener('input',renderCreatedNovels);
 $('#librarySort').addEventListener('change',renderCreatedNovels);
 $('#libraryGroup').addEventListener('change',renderCreatedNovels);
-$('#novelSettingsBtn').addEventListener('click',()=>{
+let settingsDirty=false,settingsSaving=false,settingsFile=null,settingsObjectUrl=null,settingsCoverKey=null,settingsUploadedKey=null;
+function leaveNovelSettings(next){
+  if(!novel.classList.contains('settings-open')||next==='settings')return true;
+  if(settingsSaving)return false;
+  if(settingsDirty&&!confirm('저장하지 않은 소설 설정을 버리고 이동할까요?'))return false;
+  settingsDirty=false;return true;
+}
+function renderNovelSettings(){
   const n=allNovels().find(n=>n.id===activeNovelId);if(!n)return;
-  openCreateNovelModal();$('#novelCoverFields').hidden=false;editingNovelId=n.id;$('#createNovelHeading').textContent='소설 정보 수정';$('#createNovelSubmit').textContent='저장';
-  $('#createNovelTitle').value=n.title;$('#createNovelAuthor').value=n.author||'';$('#createNovelSeries').value=n.series||'';$('#createNovelSeriesIndex').value=n.seriesIndex||'';
+  if(settingsObjectUrl)URL.revokeObjectURL(settingsObjectUrl);
+  settingsFile=null;settingsObjectUrl=null;settingsUploadedKey=null;settingsCoverKey=n.coverKey||null;settingsDirty=false;
+  $('#settingsTitle').value=n.title;$('#settingsAuthor').value=n.author||'';$('#settingsSeries').value=n.series||'';$('#settingsSeriesIndex').value=n.seriesIndex||'';
+  $('#settingsSeriesList').innerHTML=[...new Set([...loadCreatedSeries().map(x=>x.name),...allNovels().map(x=>x.series).filter(Boolean)])].map(x=>`<option value="${escapeCreateText(x)}"></option>`).join('');
+  $('#settingsCoverFile').value='';$('#settingsStatus').textContent='';
+  refreshSettingsCover();
+}
+function refreshSettingsCover(){
+  const preview=$('#settingsCoverPreview');
+  preview.classList.toggle('has-cover',!!(settingsFile||settingsCoverKey));
+  if(settingsObjectUrl){preview.dataset.coverKey='';preview.style.backgroundImage=`url("${settingsObjectUrl}")`;}
+  else applyCover(preview,settingsCoverKey);
+  $('#settingsCoverRemove').disabled=settingsSaving||!(settingsFile||settingsCoverKey);
+}
+async function selectSettingsCover(file){
+  if(!file||settingsSaving)return;
+  if(!['image/jpeg','image/png','image/webp','image/gif','image/avif'].includes(file.type)||file.size>10*1024*1024){$('#settingsStatus').textContent='10MB 이하의 JPG, PNG, WebP, GIF, AVIF 이미지를 선택해 주세요.';return;}
+  const url=URL.createObjectURL(file),img=new Image();
+  try{img.src=url;await img.decode();}catch{URL.revokeObjectURL(url);$('#settingsStatus').textContent='읽을 수 없는 이미지입니다.';return;}
+  if(settingsObjectUrl)URL.revokeObjectURL(settingsObjectUrl);
+  settingsObjectUrl=url;settingsFile=file;settingsUploadedKey=null;settingsDirty=true;$('#settingsStatus').textContent='변경 사항을 저장해 주세요.';refreshSettingsCover();
+}
+$('#novelSettingsBtn').addEventListener('click',()=>{if(!novel.classList.contains('settings-open'))switchView('settings')});
+$('#novelSettingsForm').addEventListener('input',()=>{settingsDirty=true;$('#settingsStatus').textContent='변경 사항을 저장해 주세요.'});
+$('#settingsReset').addEventListener('click',renderNovelSettings);
+$('#settingsCoverUpload').addEventListener('click',()=>$('#settingsCoverFile').click());
+$('#settingsCoverFile').addEventListener('change',e=>selectSettingsCover(e.target.files[0]));
+$('#settingsCoverRemove').addEventListener('click',()=>{
+  if(settingsObjectUrl)URL.revokeObjectURL(settingsObjectUrl);
+  settingsObjectUrl=null;settingsFile=null;settingsCoverKey=null;settingsUploadedKey=null;settingsDirty=true;$('#settingsCoverFile').value='';refreshSettingsCover();$('#settingsStatus').textContent='저장하면 표지가 삭제됩니다.';
 });
+const settingsDrop=$('#settingsCoverPreview');
+['dragenter','dragover'].forEach(type=>settingsDrop.addEventListener(type,e=>{e.preventDefault();settingsDrop.classList.add('drag-over')}));
+['dragleave','drop'].forEach(type=>settingsDrop.addEventListener(type,e=>{e.preventDefault();settingsDrop.classList.remove('drag-over');if(type==='drop')selectSettingsCover(e.dataTransfer.files[0])}));
+$('#novelSettingsForm').addEventListener('submit',async e=>{
+ e.preventDefault();if(settingsSaving)return;
+ const title=$('#settingsTitle').value.trim();if(!title){$('#settingsTitle').focus();return;}
+ const novelId=activeNovelId;settingsSaving=true;
+ $('#novelSettingsForm').querySelectorAll('input,button').forEach(el=>el.disabled=true);$('#settingsStatus').textContent='저장 중…';
+ try{
+  if(settingsFile&&!settingsUploadedKey){settingsUploadedKey='cover_'+crypto.randomUUID();try{await window.libraryCloud.putMedia(settingsUploadedKey,settingsFile)}catch(error){settingsUploadedKey=null;throw error}}
+  const items=loadCreatedNovels(),item=items.find(n=>n.id===novelId);if(!item)throw new Error('소설을 찾을 수 없습니다.');
+  Object.assign(item,{title,author:$('#settingsAuthor').value.trim(),series:$('#settingsSeries').value.trim(),seriesIndex:$('#settingsSeriesIndex').value.trim()});
+  const key=settingsUploadedKey||settingsCoverKey;if(key)item.coverKey=key;else delete item.coverKey;
+  saveCreatedNovels(items);await window.libraryCloud.flush();settingsDirty=false;
+  renderNovelIdentity();renderCreatedNovels();renderNovelSettings();$('#settingsStatus').textContent='클라우드에 저장했습니다.';
+ }catch(error){$('#settingsStatus').textContent='저장하지 못했습니다. '+(error.message||'다시 시도해 주세요.');}
+ finally{settingsSaving=false;$('#novelSettingsForm').querySelectorAll('input,button').forEach(el=>el.disabled=false);refreshSettingsCover();}
+});
+window.addEventListener('beforeunload',e=>{if(settingsDirty||settingsSaving){e.preventDefault();e.returnValue=''}});
 $('#sideSearchInputV45').addEventListener('input',renderSidebar);
 $$('.side-tabs-v45 button').forEach((button,index)=>button.addEventListener('click',()=>{
   $$('.side-tabs-v45 button').forEach(b=>b.classList.toggle('active',b===button));
