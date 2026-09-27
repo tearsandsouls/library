@@ -1175,8 +1175,6 @@
 .cover-picker{display:flex;align-items:center;gap:16px}.cover-picker img{width:84px;height:112px;object-fit:cover;border-radius:6px;border:1px solid #ddd}.cover-picker>div{min-width:0;flex:1}.cover-picker input{max-width:100%;font-size:13px}.cover-picker p{font-size:12px;color:#666}.cover-picker button{background:white;border:1px solid #ccc;border-radius:4px;padding:5px 9px}#createNovelError{color:#a32b2b;font-size:13px}.create-novel-modal{max-height:90vh;overflow-y:auto}
 
 /* Novel metadata and cover settings */
-#novelScreen.settings-open .layout{grid-template-columns:minmax(0,1fr)!important}
-#novelScreen.settings-open .side.side-v45{display:none!important}
 .settings-open .content{padding:0;background:#fafafa;min-height:calc(100vh - 58px)}
 .novel-settings-tabs{height:62px;padding:0 28px;background:#fff;border-bottom:1px solid #e5e5e8;display:flex;align-items:stretch}
 .novel-settings-tabs span{display:flex;align-items:center;border-bottom:3px solid #333;padding:0 16px;font-size:16px;font-weight:600}
