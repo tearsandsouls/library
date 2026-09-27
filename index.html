@@ -147,7 +147,27 @@
   <div class="side-scroll-v45"></div>
 <div id="snippetPanel" class="hidden"><label for="snippetText">이 작품의 메모</label><textarea id="snippetText" placeholder="아이디어와 메모를 남겨보세요."></textarea></div></aside>
 <main class="main"><div class="toolbar" id="planToolbar"><div class="modes"><button class="active" data-mode="grid">▦ Grid</button><button data-mode="matrix">▤ Matrix</button><button data-mode="outline">☰ Outline</button><button data-mode="timeline">⌛ Timeline</button></div><input id="sceneSearch" placeholder="Search scenes..." /></div>
-<div class="content"><section id="episodesView" class="episodes-view">
+<div class="content">
+<section id="novelSettingsView" class="hidden" aria-label="소설 설정">
+ <div class="novel-settings-tabs"><span>ⓘ 소설 정보</span></div>
+ <form id="novelSettingsForm" class="novel-settings-grid">
+  <div class="novel-settings-card">
+   <h2>소설 정보</h2><p>서재에 표시할 소설의 정보를 수정합니다.</p>
+   <label for="settingsTitle">소설 제목</label><input id="settingsTitle" required maxlength="300">
+   <label for="settingsAuthor">작가명 / 필명</label><input id="settingsAuthor" maxlength="200">
+   <div class="novel-settings-series"><div><label for="settingsSeries">시리즈 (선택)</label><input id="settingsSeries" list="settingsSeriesList" placeholder="시리즈 선택 또는 새 이름 입력"><datalist id="settingsSeriesList"></datalist></div><div><label for="settingsSeriesIndex">시리즈 순서</label><input id="settingsSeriesIndex" placeholder="예: 본편, 1"></div></div>
+   <div class="novel-settings-actions"><button type="submit" id="settingsSave">변경 사항 저장</button><button type="button" id="settingsReset">되돌리기</button></div>
+   <p id="settingsStatus" role="status" aria-live="polite"></p>
+  </div>
+  <div class="novel-settings-card novel-settings-cover">
+   <h2>표지</h2><p>서재와 소설 화면에 표시되는 표지입니다.</p>
+   <div class="novel-cover-actions"><button type="button" id="settingsCoverUpload">표지 업로드</button><button type="button" id="settingsCoverRemove" aria-label="표지 삭제">표지 삭제</button><span>또는 아래 영역에 끌어다 놓으세요</span></div>
+   <input type="file" id="settingsCoverFile" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" hidden>
+   <div id="settingsCoverPreview" class="settings-cover-preview"><span>표지를 추가해 주세요<br><small>JPG · PNG · WebP · GIF · AVIF / 최대 10MB</small></span></div>
+  </div>
+ </form>
+</section>
+<section id="episodesView" class="episodes-view">
   <div class="novel-hero">
     <div class="novel-hero-copy">
       <div class="novel-kicker">본편 · 장편 웹소설</div>
