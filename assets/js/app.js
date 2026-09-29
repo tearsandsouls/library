@@ -57,7 +57,7 @@ function openNovel(id=DEFAULT_NOVEL_ID){
   renderNovelIdentity();renderSidebar();renderAll();switchView('episodes');
   $('#saveState').textContent=storageBlocked?'저장 데이터를 읽지 못했습니다 · 덮어쓰기 중지':(window.libraryCloud.unsaved?'클라우드에 저장 중…':'● 클라우드 저장됨');
 }
-function openHome(){if(!leaveNovelSettings('home'))return;if(mediaBusy){alert('미디어 저장이 끝난 뒤 이동해 주세요.');return}if(!flushSave())return;observer?.disconnect();novel.classList.remove('open');home.classList.remove('hidden-screen');history.replaceState(null,'',location.pathname+location.search);renderCreatedNovels();window.scrollTo(0,0)}
+function openHome(){if(!closeCharacterPopup())return;if(!leaveNovelSettings('home'))return;if(mediaBusy){alert('미디어 저장이 끝난 뒤 이동해 주세요.');return}if(!flushSave())return;observer?.disconnect();novel.classList.remove('open');home.classList.remove('hidden-screen');history.replaceState(null,'',location.pathname+location.search);renderCreatedNovels();window.scrollTo(0,0)}
 (document.getElementById('homeBackNew')||document.getElementById('homeBack'))?.addEventListener('click',openHome);
 function charById(id){return state.characters.find(c=>c.id===id)}
 function ageAt(charId,year){const c=charById(charId);if(!c||c.baseAge==null)return null;return c.baseAge+(Number(year)-Number(state.baseYear))}
@@ -472,6 +472,7 @@ function toggleWriteChapterMenu(){
   if($('#writeChapterMenu').classList.contains('hidden')) openWriteChapterMenu(); else closeWriteChapterMenu();
 }
 function switchView(view){
+  if(!closeCharacterPopup())return;
   if(!leaveNovelSettings(view)||!flushSave())return;
   novel.classList.toggle('settings-open',view==='settings');
   $('#novelSettingsView').classList.toggle('hidden',view!=='settings');
@@ -584,12 +585,14 @@ function renderNovelIdentity(){
 }
 function renderSidebar(){
   const q=($('#sideSearchInputV45').value||'').trim().toLowerCase();
-  const chars=state.characters.map(c=>({name:c.name,detail:c.baseAge==null?'':`${state.baseYear}년 기준 ${c.baseAge}세`,avatar:c.avatar||c.name.slice(0,1)}));
+  const chars=state.characters.map(c=>({id:c.id,name:c.name,detail:c.description||c.detail||(c.baseAge==null?'':`${state.baseYear}년 기준 ${c.baseAge}세`),avatar:c.avatar||c.name.slice(0,1),portraitKey:c.portraitKey,tags:c.tags}));
   const places=[...new Set(Object.values(state.scenes).map(s=>s.location).filter(Boolean))].map(name=>({name,detail:'장면에 사용한 장소',avatar:'⌖'}));
   const other=(state.others||[]).map(x=>({...x,avatar:'▤'}));
-  $('.side-scroll-v45').innerHTML=[['인물',chars],['장소',places],['기타',other]].map(([label,items])=>{items=items.filter(x=>(x.name+' '+x.detail).toLowerCase().includes(q));return `<div class="group"><h4><span>${label}</span><small>${items.length}개</small></h4>${items.map(x=>`<div class="entry"><div class="avatar">${escapeHtml(x.avatar)}</div><div><b>${escapeHtml(x.name)}</b><p>${escapeHtml(x.detail)}</p></div></div>`).join('')||'<p class="empty-message">등록된 항목이 없습니다.</p>'}</div>`}).join('');
+  $('.side-scroll-v45').innerHTML=[['인물',chars],['장소',places],['기타',other]].map(([label,items])=>{items=items.filter(x=>(x.name+' '+x.detail).toLowerCase().includes(q));return `<div class="group"><h4><span>${label}</span><small>${items.length}개 ${label==='인물'?'<button type="button" data-add-character aria-label="등장인물 추가">＋</button>':''}</small></h4>${items.map(x=>`<div class="entry" ${x.id&&label==='인물'?`role="button" tabindex="0" data-character-id="${escapeAttr(x.id)}" aria-label="${escapeAttr(x.name)} 인물 정보"`:""}><div class="avatar">${escapeHtml(x.avatar)}</div><div><b>${escapeHtml(x.name)}</b>${x.tags?`<span class="codex-entry-tags">${codexTerms(x.tags).map(tag=>`<small>${escapeHtml(tag)}</small>`).join('')}</span>`:''}<p>${escapeHtml(x.detail)}</p></div></div>`).join('')||'<p class="empty-message">등록된 항목이 없습니다.</p>'}</div>`}).join('');
   $('.side-counts-v45').innerHTML=`<span>이 작품의 설정 · ${chars.length+places.length+other.length}개</span>`;
   $('#snippetText').value=state.snippets||'';
+  $$('[data-character-id]').forEach(el=>{const c=charById(el.dataset.characterId);el.classList.toggle('selected-character',!codexPanel.classList.contains('hidden')&&codexDraft?.id===c?.id);if(c?.portraitKey){applyCover(el.querySelector('.avatar'),c.portraitKey);el.querySelector('.avatar').textContent=''}el.addEventListener('click',()=>openCharacterPopup(el.dataset.characterId,el));el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openCharacterPopup(el.dataset.characterId,el)}})});
+  $('[data-add-character]')?.addEventListener('click',e=>openCharacterPopup(null,e.currentTarget));
 }
 
 const createNovelBackdrop=document.getElementById('createNovelBackdrop');
@@ -858,6 +861,147 @@ $$('.side-tabs-v45 button').forEach((button,index)=>button.addEventListener('cli
 $('#snippetText').addEventListener('input',e=>{state.snippets=e.target.value;scheduleSave()});
 $('.top-ghost-btn').addEventListener('click',()=>{$('#novelScreen').classList.toggle('sidebar-collapsed')});
 $('.top-ghost-btn.compact').addEventListener('click',()=>{$('#novelScreen').classList.toggle('focus-writing')});
+/* Character mention matching: pure helpers, also exercised by tests. */
+function codexTerms(value){return (Array.isArray(value)?value:String(value||'').split(/[,\n]/)).map(x=>String(x).trim()).filter(Boolean)}
+function codexMatches(text,character){
+ text=String(text||'');if(character.tracking===false)return [];
+ const fold=s=>character.caseSensitive?s:s.toLocaleLowerCase();
+ const hay=fold(text),terms=[...new Set([character.name,...codexTerms(character.aliases)].filter(Boolean).map(fold))].sort((a,b)=>b.length-a.length);
+ const excluded=[];for(const phrase of codexTerms(character.exclusions)){const needle=fold(phrase);let pos=0;while((pos=hay.indexOf(needle,pos))!==-1){excluded.push([pos,pos+needle.length]);pos+=needle.length}}
+ const matches=[];for(let pos=0;pos<hay.length;){const term=terms.find(t=>hay.startsWith(t,pos)&&!excluded.some(([a,b])=>pos<b&&pos+t.length>a));if(term){matches.push([pos,pos+term.length]);pos+=term.length}else pos++}return matches;
+}
+/* End character mention helpers. */
+let codexDraft=null,codexDirty=false,codexBusy=false,codexTab='details',codexSub='notes',codexPinned=false,codexOpener=null,codexPortraitFile=null,codexPortraitURL=null,codexLoadToken=0;
+const codexPanel=document.createElement('section');
+codexPanel.id='characterPopup';codexPanel.className='character-popup hidden';codexPanel.setAttribute('role','dialog');codexPanel.setAttribute('aria-label','등장인물 정보');
+codexPanel.innerHTML=`<div class="character-popup-tools"><button type="button" id="characterPin" aria-pressed="false">⌖ 고정</button><button type="button" id="characterClose" aria-label="인물 창 닫기">×</button></div><div class="character-popup-card"><div id="characterScope" class="character-scope"></div><div class="character-heading"><div><span class="character-type">◎ 등장인물</span><h2 id="characterHeading"></h2><div id="characterTags" class="character-tags"></div></div><button type="button" id="characterPortrait" aria-label="인물 사진 변경"><span>◎</span></button><input id="characterPortraitFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" hidden></div><div class="character-summary"><span id="characterMentionCount"></span><button type="button" id="characterPortraitRemove">사진 지우기</button></div><div class="character-tabs" role="tablist" aria-label="인물 정보 탭">${[['details','상세 정보'],['research','자료'],['relations','관계'],['mentions','언급'],['tracking','추적 설정']].map(([id,label])=>`<button type="button" role="tab" id="characterTab-${id}" data-character-tab="${id}" aria-controls="characterBody">${label}</button>`).join('')}</div><div id="characterBody" role="tabpanel" tabindex="0"></div><div class="character-footer"><span id="characterStatus" role="status" aria-live="polite"></span><button type="button" id="characterSave">저장</button></div></div>`;
+novel.append(codexPanel);
+function characterDirty(){codexDirty=true;$('#characterStatus').textContent='저장하지 않은 변경 사항'}
+function positionCharacterPopup(){
+ if(codexPanel.classList.contains('hidden'))return;
+ const side=$('.side.side-v45').getBoundingClientRect(),top=$('.top').getBoundingClientRect();
+ const left=innerWidth>900&&side.width?side.right+12:12;
+ codexPanel.style.left=left+'px';codexPanel.style.top=Math.max(12,top.bottom+12)+'px';codexPanel.style.width=Math.max(260,Math.min(650,innerWidth-left-16))+'px';codexPanel.style.maxHeight=Math.max(200,innerHeight-Math.max(12,top.bottom+12)-16)+'px';
+}
+window.addEventListener('resize',positionCharacterPopup);window.addEventListener('scroll',positionCharacterPopup,{passive:true});
+function closeCharacterPopup(force=false){
+ if(codexPanel.classList.contains('hidden'))return true;
+ if(codexBusy)return false;
+ if(codexDirty&&!force&&!confirm('저장하지 않은 인물 정보를 버리고 닫을까요?'))return false;
+ codexLoadToken++;codexPanel.classList.add('hidden');codexDraft=null;codexDirty=false;
+ if(codexPortraitURL)URL.revokeObjectURL(codexPortraitURL);codexPortraitURL=null;codexPortraitFile=null;
+ $$('[data-character-id]').forEach(el=>el.classList.remove('selected-character'));
+ if(codexOpener?.isConnected)codexOpener.focus();return true;
+}
+function openCharacterPopup(id,opener){
+ if(!closeCharacterPopup())return;
+ codexDraft=structuredClone(charById(id)||{id:'character_'+crypto.randomUUID(),name:'새 등장인물',avatar:'◎',description:'',aliases:[],tags:[],relations:[],details:[],researchNotes:'',researchLinks:[],tracking:true});
+ codexTab='details';codexSub='notes';codexOpener=opener;codexPortraitFile=null;codexDirty=!id;
+ codexPanel.classList.remove('hidden');renderCharacterHeader();renderCharacterBody();positionCharacterPopup();
+ $('#characterStatus').textContent=id?'':'이름과 정보를 입력한 뒤 저장해 주세요.';
+ $$('[data-character-id]').forEach(el=>el.classList.toggle('selected-character',el.dataset.characterId===id));
+ $('#characterTab-details').focus();
+}
+function characterSources(kind){
+ if(kind==='codex')return state.characters.filter(c=>c.id!==codexDraft.id).map(c=>({label:c.name,text:c.description||c.detail||''}));
+ if(kind==='snippets')return [{label:'작품 메모',text:state.snippets||''}];
+ return orderedSceneIds().map(id=>{const scene=state.scenes[id];return {id,label:`${chapterForScene(id)?.title||''} · ${scene.title}`,text:kind==='summaries'?[scene.goal,scene.notes].filter(Boolean).join('\n'):scene.text||''}});
+}
+function characterMentions(kind='manuscript'){return characterSources(kind).map(source=>({...source,matches:codexMatches(source.text,codexDraft)})).filter(source=>source.matches.length)}
+function renderCharacterHeader(){
+ const n=allNovels().find(n=>n.id===activeNovelId);
+ $('#characterScope').textContent=`${n?.title||'이 소설'}의 등장인물`;
+ $('#characterHeading').textContent=codexDraft.name||'이름 없는 인물';
+ $('#characterTags').innerHTML=codexTerms(codexDraft.tags).map(tag=>`<span>${escapeHtml(tag)}</span>`).join('');
+ $('#characterMentionCount').textContent=`원고에서 ${characterMentions().reduce((sum,s)=>sum+s.matches.length,0).toLocaleString()}회 언급`;
+ const portrait=$('#characterPortrait');portrait.classList.toggle('has-portrait',!!(codexPortraitURL||codexDraft.portraitKey));
+ if(codexPortraitURL){portrait.dataset.coverKey='';portrait.style.backgroundImage=`url("${codexPortraitURL}")`}else applyCover(portrait,codexDraft.portraitKey);
+ $('#characterPortraitRemove').hidden=!(codexPortraitURL||codexDraft.portraitKey);
+}
+function characterField(label,key,value,type='input',hint=''){
+ return `<label class="character-field">${label}${hint?`<small>${hint}</small>`:''}${type==='textarea'?`<textarea data-character-field="${key}">${escapeHtml(value||'')}</textarea>`:`<input data-character-field="${key}" value="${escapeAttr(value??'')}" ${type==='number'?'type="number" min="0" max="10000"':''}>`}</label>`;
+}
+function renderCharacterBody(){
+ if(!codexDraft)return;
+ const c=codexDraft,body=$('#characterBody');
+ $$('[data-character-tab]').forEach(button=>{const active=button.dataset.characterTab===codexTab;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1});body.setAttribute('aria-labelledby','characterTab-'+codexTab);
+ if(codexTab==='details'){
+ body.innerHTML=`<div class="character-section">${characterField('이름','name',c.name)}<div class="character-field-pair">${characterField('태그','tags',codexTerms(c.tags).join(', '),'input','쉼표로 구분하세요.')}${characterField(`${state.baseYear}년 기준 나이`,'baseAge',c.baseAge,'number')}</div>${characterField('별칭 / 애칭','aliases',codexTerms(c.aliases).join(', '),'input','원고에서 함께 찾을 이름을 쉼표로 구분하세요.')}${characterField('설명','description',c.description||c.detail,'textarea','외모, 성격, 배경 등 인물의 특징을 적어 주세요.')}<div class="character-text-meta"><span id="characterDescriptionCount">${(c.description||c.detail||'').length}자</span></div><div id="characterCustomDetails">${(c.details||[]).map((d,i)=>`<div class="character-custom-row"><input aria-label="추가 정보 이름" data-detail-name="${i}" value="${escapeAttr(d.label||'')}" placeholder="예: 직업"><textarea aria-label="추가 정보 내용" data-detail-value="${i}">${escapeHtml(d.value||'')}</textarea><button type="button" data-detail-remove="${i}" aria-label="추가 정보 삭제">×</button></div>`).join('')}</div><button type="button" id="characterAddDetail">＋ 세부 정보 추가</button></div>`;
+ }else if(codexTab==='research'){
+ body.innerHTML=`<div class="character-subtabs"><button type="button" data-character-sub="notes" class="${codexSub==='notes'?'active':''}">메모</button><button type="button" data-character-sub="external" class="${codexSub==='external'?'active':''}">외부 자료</button></div><div class="character-section">${codexSub==='notes'?characterField('자료 메모','researchNotes',c.researchNotes,'textarea','인물 설정에 참고할 자료와 아이디어를 기록하세요.'): `<h3>외부 자료</h3><p>참고 링크를 저장합니다. 링크의 내용은 자동으로 수집하지 않습니다.</p>${(c.researchLinks||[]).map((link,i)=>`<div class="character-link-row"><input aria-label="자료 제목" data-link-title="${i}" value="${escapeAttr(link.title||'')}" placeholder="자료 제목"><input aria-label="자료 주소" data-link-url="${i}" value="${escapeAttr(link.url||'')}" placeholder="https://">${safeCharacterURL(link.url)?`<a href="${escapeAttr(safeCharacterURL(link.url))}" target="_blank" rel="noopener noreferrer">열기 ↗</a>`:''}<button type="button" data-link-remove="${i}" aria-label="자료 삭제">×</button></div>`).join('')}<button type="button" id="characterAddLink">＋ 자료 추가</button>`}</div>`;
+ }else if(codexTab==='relations'){
+ const others=state.characters.filter(x=>x.id!==c.id&&!((c.relations||[]).some(r=>r.id===x.id)));
+ body.innerHTML=`<div class="character-section"><h3>인물 관계</h3><p>다른 등장인물과 연결하고 관계를 기록하세요.</p><div class="character-relation-add"><select id="characterRelationTarget" aria-label="연결할 인물"><option value="">인물 선택</option>${others.map(x=>`<option value="${escapeAttr(x.id)}">${escapeHtml(x.name)}</option>`).join('')}</select><button type="button" id="characterAddRelation">＋ 관계 추가</button></div>${(c.relations||[]).map((r,i)=>`<div class="character-relation-row"><strong>${escapeHtml(charById(r.id)?.name||'삭제된 인물')}</strong><input aria-label="관계 설명" data-relation-label="${i}" value="${escapeAttr(r.label||'')}" placeholder="예: 친구, 연인, 라이벌"><button type="button" data-relation-remove="${i}" aria-label="관계 삭제">−</button></div>`).join('')||'<p class="character-empty">아직 연결된 인물이 없습니다.</p>'}</div>`;
+ }else if(codexTab==='mentions'){
+ const source=['manuscript','summaries','codex','snippets'].includes(codexSub)?codexSub:'manuscript';codexSub=source;
+ const items=characterMentions(source);
+ body.innerHTML=`<div class="character-subtabs">${[['manuscript','원고'],['summaries','장면 메모'],['codex','설정집'],['snippets','작품 메모']].map(([id,label])=>`<button type="button" data-character-sub="${id}" class="${id===source?'active':''}">${label} <small>${characterMentions(id).reduce((n,s)=>n+s.matches.length,0)}</small></button>`).join('')}</div>${items.map(item=>`<article class="character-mention"><header><strong>${escapeHtml(item.label)}</strong><span>${item.matches.length}회</span>${item.id?`<button type="button" data-character-scene="${escapeAttr(item.id)}">장면 열기 ↗</button>`:''}</header><p>${highlightCharacterMentions(item.text,item.matches)}</p></article>`).join('')||`<p class="character-empty">${c.tracking===false?'이름 추적이 꺼져 있습니다. 추적 설정에서 켜 주세요.':'이름이나 별칭이 언급된 내용이 없습니다.'}</p>`}`;
+ }else{
+ body.innerHTML=`<div class="character-section"><h3>이름 추적 / 일치 설정</h3><label class="character-check"><input type="checkbox" data-character-check="tracking" ${c.tracking!==false?'checked':''}> 이름과 별칭으로 언급을 찾습니다.</label><label class="character-check"><input type="checkbox" data-character-check="caseSensitive" ${c.caseSensitive?'checked':''}> 영문 이름과 별칭의 대소문자를 구분합니다.</label>${characterField('제외할 문구','exclusions',codexTerms(c.exclusions).join(', '),'input','이 문구 안에 포함된 이름은 언급으로 세지 않습니다. 쉼표로 구분하세요.')}</div><div class="character-section"><h3>AI 참고 정보</h3><p class="character-notice">현재 AI 연동은 없습니다. 아래 선택은 인물의 참고 정보 사용 설정으로만 저장됩니다.</p>${[['always','항상 포함','AI가 참고할 정보에 항상 포함합니다.'],['detected','이름이 감지되면 포함 (기본)','본문에서 이름이나 별칭을 찾았을 때 포함합니다.'],['manual','직접 선택할 때만 포함','자동으로 포함하지 않고 직접 선택할 때만 사용합니다.'],['never','포함하지 않음','AI가 참고하는 정보에서 제외합니다.']].map(([id,label,hint])=>`<label class="character-radio"><input type="radio" name="characterAIContext" value="${id}" ${(c.aiContext||'detected')===id?'checked':''}><span>${label}<small>${hint}</small></span></label>`).join('')}</div>`;
+ }
+ body.scrollTop=0;
+}
+function safeCharacterURL(value){try{const url=new URL(value);return ['https:','http:'].includes(url.protocol)?url.href:''}catch{return ''}}
+function highlightCharacterMentions(text,matches){
+ // Keep large manuscripts responsive while still reporting the complete count.
+ const start=Math.max(0,(matches[0]?.[0]||0)-100),end=Math.min(text.length,start+2500);let pos=start,html=start?'…':'';
+ for(const [a,b] of matches){if(a<start||a>=end)continue;html+=escapeHtml(text.slice(pos,a))+'<mark>'+escapeHtml(text.slice(a,Math.min(b,end)))+'</mark>';pos=Math.min(b,end)}
+ return html+escapeHtml(text.slice(pos,end))+(end<text.length?'…':'');
+}
+codexPanel.addEventListener('input',e=>{
+ if(!codexDraft||codexBusy)return;const el=e.target,d=el.dataset,c=codexDraft;
+ if(d.characterField){const key=d.characterField;c[key]=['aliases','tags','exclusions'].includes(key)?codexTerms(el.value):key==='baseAge'?(el.value===''?null:Number(el.value)):el.value;}
+ else if(d.characterCheck)c[d.characterCheck]=el.checked;
+ else if(el.name==='characterAIContext')c.aiContext=el.value;
+ else if(d.detailName!==undefined)c.details[+d.detailName].label=el.value;
+ else if(d.detailValue!==undefined)c.details[+d.detailValue].value=el.value;
+ else if(d.linkTitle!==undefined)c.researchLinks[+d.linkTitle].title=el.value;
+ else if(d.linkUrl!==undefined)c.researchLinks[+d.linkUrl].url=el.value;
+ else if(d.relationLabel!==undefined)c.relations[+d.relationLabel].label=el.value;
+ else return;
+ characterDirty();renderCharacterHeader();if($('#characterDescriptionCount'))$('#characterDescriptionCount').textContent=(c.description||'').length+'자';
+});
+codexPanel.addEventListener('click',e=>{
+ const button=e.target.closest('button');if(!button||codexBusy)return;const d=button.dataset,c=codexDraft;
+ if(d.characterTab){codexTab=d.characterTab;codexSub=codexTab==='mentions'?'manuscript':'notes';renderCharacterBody()}
+ if(d.characterSub){codexSub=d.characterSub;renderCharacterBody()}
+ if(button.id==='characterAddDetail'){(c.details??=[]).push({label:'',value:''});characterDirty();renderCharacterBody()}
+ if(button.id==='characterAddLink'){(c.researchLinks??=[]).push({title:'',url:''});characterDirty();renderCharacterBody()}
+ if(button.id==='characterAddRelation'){const id=$('#characterRelationTarget').value;if(id){(c.relations??=[]).push({id,label:''});characterDirty();renderCharacterBody()}}
+ for(const [attr,key] of [['detailRemove','details'],['linkRemove','researchLinks'],['relationRemove','relations']])if(d[attr]!==undefined){c[key].splice(+d[attr],1);characterDirty();renderCharacterBody()}
+ if(d.characterScene){const id=d.characterScene;if(closeCharacterPopup())openScene(id)}
+});
+$('.character-tabs').addEventListener('keydown',e=>{
+ if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const tabs=$$('[data-character-tab]');let index=tabs.indexOf(document.activeElement);index=e.key==='Home'?0:e.key==='End'?tabs.length-1:(index+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tabs[index].click();tabs[index].focus();
+});
+$('#characterClose').addEventListener('click',()=>closeCharacterPopup());
+$('#characterPin').addEventListener('click',()=>{codexPinned=!codexPinned;$('#characterPin').setAttribute('aria-pressed',String(codexPinned));$('#characterPin').textContent=codexPinned?'⌖ 고정됨':'⌖ 고정'});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!codexPanel.classList.contains('hidden')){e.preventDefault();closeCharacterPopup()}});
+document.addEventListener('click',e=>{if(!codexPinned&&!codexPanel.classList.contains('hidden')&&!e.composedPath().includes(codexPanel)&&!e.target.closest('[data-character-id],[data-add-character]')&&!codexDirty&&!codexBusy)closeCharacterPopup()});
+$('#characterPortrait').addEventListener('click',()=>$('#characterPortraitFile').click());
+$('#characterPortraitFile').addEventListener('change',async e=>{
+ const file=e.target.files[0];e.target.value='';if(!file||codexBusy)return;const token=++codexLoadToken;
+ if(!['image/jpeg','image/png','image/webp','image/gif','image/avif'].includes(file.type)||file.size>10*1024*1024){$('#characterStatus').textContent='10MB 이하의 이미지 파일을 선택해 주세요.';return}
+ const url=URL.createObjectURL(file),img=new Image();try{img.src=url;await img.decode()}catch{URL.revokeObjectURL(url);if(token===codexLoadToken)$('#characterStatus').textContent='읽을 수 없는 이미지입니다.';return}
+ if(token!==codexLoadToken||!codexDraft){URL.revokeObjectURL(url);return}
+ if(codexPortraitURL)URL.revokeObjectURL(codexPortraitURL);codexPortraitURL=url;codexPortraitFile=file;characterDirty();renderCharacterHeader();
+});
+$('#characterPortraitRemove').addEventListener('click',()=>{codexLoadToken++;if(codexPortraitURL)URL.revokeObjectURL(codexPortraitURL);codexPortraitURL=null;codexPortraitFile=null;delete codexDraft.portraitKey;characterDirty();renderCharacterHeader()});
+$('#characterSave').addEventListener('click',async()=>{
+ if(codexBusy||!codexDraft)return;
+ if(!codexDraft.name.trim()){codexTab='details';renderCharacterBody();$('#characterStatus').textContent='인물 이름을 입력해 주세요.';return}
+ if((codexDraft.researchLinks||[]).some(x=>x.url&&!safeCharacterURL(x.url))){$('#characterStatus').textContent='자료 주소는 http:// 또는 https://로 입력해 주세요.';return}
+ codexBusy=true;codexLoadToken++;codexPanel.querySelectorAll('input,textarea,button,select').forEach(el=>el.disabled=true);$('#characterStatus').textContent='클라우드에 저장 중…';
+ try{
+ if(codexPortraitFile){const key='character_'+crypto.randomUUID();await window.libraryCloud.putMedia(key,codexPortraitFile);codexDraft.portraitKey=key;codexPortraitFile=null;}
+ codexDraft.name=codexDraft.name.trim();const existing=charById(codexDraft.id);if(existing)Object.assign(existing,structuredClone(codexDraft));else state.characters.push(structuredClone(codexDraft));
+ if(!codexDraft.portraitKey&&existing)delete existing.portraitKey;
+ if(!save())throw new Error('소설 데이터를 저장할 수 없습니다.');await window.libraryCloud.flush();codexDirty=false;renderSidebar();renderAllPlan();$('#characterStatus').textContent='클라우드에 저장했습니다.';
+ }catch(error){codexDirty=true;$('#characterStatus').textContent='저장 실패: '+(error.message||'다시 시도해 주세요.')}
+ finally{codexBusy=false;codexPanel.querySelectorAll('input,textarea,button,select').forEach(el=>el.disabled=false)}
+});
+window.addEventListener('beforeunload',e=>{if(codexDirty||codexBusy){e.preventDefault();e.returnValue=''}});
+
 if(document.modelContext?.registerTool){
   try{Promise.resolve(document.modelContext.registerTool({name:'list_novels',description:'List the novels shown in this browser’s library.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute(input){if(!input||typeof input!=='object'||Object.keys(input).length)throw new Error('Expected an empty object');return {novels:allNovels().map(({id,title,author,series})=>({id,title,author,series}))}}})).catch(()=>{})}catch(e){}
 }
