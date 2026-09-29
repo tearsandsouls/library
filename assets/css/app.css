@@ -1197,3 +1197,33 @@
 .settings-cover-preview.drag-over{outline:3px solid #8c8171;outline-offset:3px}
 .novel-settings-card #settingsStatus{margin:18px 0 0;font-size:14px;min-height:24px}
 @media(max-width:850px){.novel-settings-grid{grid-template-columns:1fr;gap:22px;padding:20px}.novel-settings-card{padding:24px}.novel-settings-series{gap:12px}.novel-settings-tabs{padding:0 12px}}
+/* Korean character card, anchored beside Codex without obscuring the sidebar. */
+.character-popup{position:fixed;z-index:90;display:flex;flex-direction:column;pointer-events:auto;color:#474b52;font-size:14px}
+.character-popup.hidden{display:none}
+.character-popup-tools{display:flex;justify-content:space-between;align-items:center;padding-bottom:6px;flex:none}
+.character-popup-tools button{border:0;border-radius:20px;background:#292929;color:#fff;padding:6px 12px;cursor:pointer}
+.character-popup-card{border:1px solid #ddd;border-radius:15px;background:#fff;box-shadow:0 18px 45px #0002;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.character-scope{background:#fff0d9;color:#9b5326;text-align:center;padding:8px;font-size:13px;font-weight:600;flex:none}
+.character-heading{display:flex;justify-content:space-between;gap:16px;padding:18px 24px 10px;flex:none}
+.character-heading h2{font-size:25px;margin:8px 0 10px;overflow-wrap:anywhere}.character-type{color:#737680;font-size:13px}
+.character-tags{display:flex;gap:5px;flex-wrap:wrap}.character-tags span{padding:3px 7px;border-radius:4px;background:#f2f2f4;font-size:12px}
+#characterPortrait{width:94px;height:94px;flex:none;border:0;border-radius:8px;background:#f0f4f8 center/cover;cursor:pointer;font-size:52px;color:#647385}#characterPortrait.has-portrait span{visibility:hidden}
+.character-summary{display:flex;justify-content:space-between;align-items:center;padding:0 24px 12px;font-size:12px;color:#777}
+.character-popup button:not(.character-popup-tools button):not(#characterPortrait){font:inherit;cursor:pointer;background:#fff;border:1px solid #ddd;border-radius:5px;padding:7px 10px;color:inherit}
+.character-tabs,.character-subtabs{display:flex;gap:6px;overflow:auto;border-bottom:1px solid #e3e3e7;padding:0 12px;flex:none}
+.character-popup .character-tabs button,.character-popup .character-subtabs button{border:0!important;border-radius:0!important;background:transparent!important;white-space:nowrap;padding:13px 10px!important;color:#74747e!important}
+.character-popup .character-tabs button.active,.character-popup .character-subtabs button.active{color:#252525!important;border-bottom:2px solid #333!important}
+#characterBody{overflow:auto;min-height:100px;overscroll-behavior:contain;outline-offset:-3px}
+.character-section{padding:24px;border-bottom:1px solid #eee}.character-section:last-child{border:0}.character-section h3{font-size:14px;margin:0 0 14px}.character-section p{font-size:13px;line-height:1.6;color:#797b83}
+.character-field{display:block;margin-bottom:22px;font-size:14px;font-weight:500}.character-field small{display:block;font-size:12px;font-weight:400;color:#83838c;line-height:1.5;margin:6px 0}
+.character-popup input:not([type=checkbox]):not([type=radio]):not([type=file]),.character-popup textarea,.character-popup select{box-sizing:border-box;display:block;width:100%;border:1px solid #dddde3;border-radius:5px;background:#fff;padding:10px 12px;font:inherit;color:#333;margin-top:8px;min-width:0}
+.character-popup textarea{min-height:160px;resize:vertical;line-height:1.7}.character-field-pair{display:grid;grid-template-columns:2fr 1fr;gap:16px}.character-text-meta{font-size:12px;color:#888;text-align:right;margin:-14px 0 22px}
+.character-custom-row,.character-link-row,.character-relation-row{display:flex;align-items:center;gap:8px;border:1px solid #eee;border-radius:7px;padding:10px;margin:12px 0;flex-wrap:wrap}
+.character-custom-row input,.character-custom-row textarea,.character-link-row input,.character-relation-row input{flex:1;min-width:120px!important;margin:0!important}.character-custom-row textarea{min-height:65px}.character-relation-row strong{min-width:80px}.character-relation-add{display:flex;align-items:center;gap:10px}.character-relation-add select{flex:1;margin:0}.character-link-row a{color:#535d78}
+.character-empty{padding:26px;text-align:center;color:#888;line-height:1.8}.character-check,.character-radio{display:flex;align-items:flex-start;gap:9px;margin:14px 0;line-height:1.6}.character-check input,.character-radio input{margin:5px 0 0;accent-color:#333}.character-radio small{display:block;color:#888;font-size:12px}.character-notice{background:#f5f5f7;padding:12px;border-radius:6px}
+.character-mention header{display:flex;align-items:center;gap:12px;background:#f8f8fa;padding:12px;border-bottom:1px solid #eee}.character-mention header span{margin-left:auto;color:#888;font-size:12px}.character-mention p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;line-height:1.9;padding:16px 22px;margin:0}.character-mention mark{background:#fff0b9;color:inherit}
+.character-footer{border-top:1px solid #eee;display:flex;gap:12px;align-items:center;padding:12px 20px;flex:none}.character-footer span{flex:1;font-size:12px;color:#777}.character-popup #characterSave{background:#333;color:#fff;border-color:#333;min-width:65px}.character-popup button:disabled{opacity:.5;cursor:wait!important}
+.side-scroll-v45 [data-character-id]{cursor:pointer}.side-scroll-v45 .selected-character{outline:2px solid #555;outline-offset:-2px;border-radius:6px}.side-scroll-v45 .entry p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px}.side-scroll-v45 [data-add-character]{border:0;background:none;color:#666;font-size:20px;cursor:pointer;padding:0 4px}
+@media(max-width:900px){.character-heading{padding:14px 18px 8px}.character-section{padding:18px}.character-popup .character-tabs button{padding:12px 8px!important;font-size:13px!important}.character-heading h2{font-size:22px}#characterPortrait{width:70px;height:70px}.character-popup{max-height:85vh!important}}
+
+#characterPopup #characterSave{background:#333;color:white;border-color:#333}.codex-entry-tags{display:inline-flex;gap:4px;margin-left:8px;flex-wrap:wrap}.codex-entry-tags small{font-size:10px;padding:2px 4px;border-radius:3px;background:#eee;color:#555}
