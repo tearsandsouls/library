@@ -8,6 +8,7 @@ let saveTimer=null;
 let dirty=false;
 let storageBlocked=false;
 let mediaBusy=false;
+let storyAgeCache=null;
 function storageKey(id=activeNovelId){return `storyloom_novel_v2_${id}`}
 function blankState(){return {baseYear:null,characters:[],acts:[{id:'a1',title:'에피소드 1',subtitle:'',chapters:[{id:'ch1',title:'001',scenes:['s1']}]}],scenes:{s1:{id:'s1',title:'Scene 1',year:null,timelineLabel:'',time:'',location:'',pov:'',characters:[],goal:'',notes:'',text:'',bodyHtml:'',media:[]}},snippets:''}}
 function loadNovelState(id){
@@ -31,12 +32,13 @@ const home=$('#homeScreen'), novel=$('#novelScreen');
 function stateForLocalSave(){const copy=JSON.parse(JSON.stringify(state));for(const scene of Object.values(copy.scenes||{})){if(Array.isArray(scene.media))scene.media=scene.media.map(m=>{const x={...m};if(!String(x.src||'').startsWith('data:'))delete x.src;delete x.previewUrl;delete x._file;return x});if(typeof scene.bodyHtml==='string')scene.bodyHtml=sanitizeStoredHtml(scene.bodyHtml)}return copy}
 
 function save(){
+  storyAgeCache=null;
   clearTimeout(saveTimer);
   if(storageBlocked){$('#saveState').textContent='기존 저장 데이터를 읽지 못했습니다 · 덮어쓰기 중지';return false}
   try{localStorage.setItem(storageKey(),JSON.stringify(stateForLocalSave()));dirty=false;$('#saveState').textContent='클라우드에 저장 중…';return true}
   catch(e){dirty=true;$('#saveState').textContent='저장 실패 · 저장 공간을 확인하세요';return false}
 }
-function scheduleSave(){dirty=true;$('#saveState').textContent='저장 중…';clearTimeout(saveTimer);saveTimer=setTimeout(save,350)}
+function scheduleSave(){storyAgeCache=null;dirty=true;$('#saveState').textContent='저장 중…';clearTimeout(saveTimer);saveTimer=setTimeout(save,350)}
 function flushSave(){return !dirty||save()}
 window.libraryFlush=flushSave;
 window.addEventListener('pagehide',flushSave);
@@ -61,10 +63,74 @@ function openHome(){if(!closeCharacterPopup())return;if(!leaveNovelSettings('hom
 (document.getElementById('homeBackNew')||document.getElementById('homeBack'))?.addEventListener('click',openHome);
 function charById(id){return state.characters.find(c=>c.id===id)}
 function scenePeriod(scene){return typeof scene.timelineLabel==='string'?scene.timelineLabel:(scene.year==null?'':String(scene.year))}
-function scenePeriodLabel(scene){return scenePeriod(scene)||'시점 미정'}
-function ageAt(charId){const c=charById(charId);return c?.baseAge==null?null:c.baseAge}
-function ageText(scene){return scene.characters.map(id=>{const c=charById(id);const age=ageAt(id);return escapeHtml(c?.name||'알 수 없는 인물')+(age==null?'':` (첫등장 ${age}세)`)}).join(' · ')}
-function characterNames(scene){return scene.characters.map(id=>charById(id)?.name).filter(Boolean).join(' · ')}
+function scenePeriodLabel(scene){const raw=scenePeriod(scene);if(parseStoryPeriod(raw).kind==='relative')return relativeStoryLabel(scene)||raw+' (누적 미정)';return raw||'시점 미정'}
+function parseStoryPeriod(value){
+ const text=String(value||'').trim();
+ if(!text)return {kind:'unknown'};
+ const calendar=text.match(/^(\d{4})(?:년)?(?:\s*(\d{1,2})월)?$/);
+ if(calendar){const year=Number(calendar[1]),month=calendar[2]?Number(calendar[2]):1;if(year>=1&&month>=1&&month<=12)return {kind:'calendar',months:year*12+month-1};return {kind:'unknown'}}
+ if(/^(첫\s*등장|시작|이야기\s*시작)$/.test(text))return {kind:'start',months:0};
+ if(/^(같은\s*(날|시점)|동시)$/.test(text))return {kind:'relative',months:0};
+ const relative=text.replace(/\s+/g,'');
+ const match=relative.match(/^([+-]?\d+년)?([+-]?\d+(?:개월|달))?(뒤|후|전)?$/);
+ if(!match||(!match[1]&&!match[2]))return {kind:'unknown'};
+ let years=match[1]?parseInt(match[1],10):0,rest=match[2]?parseInt(match[2],10):0;if(years<0&&match[2]&&!/^[+-]/.test(match[2]))rest=-rest;let months=years*12+rest;
+ if(match[3]==='전')months=-Math.abs(months);
+ return Number.isSafeInteger(months)?{kind:'relative',months}:{kind:'unknown'};
+}
+function elapsedPeriod(months){
+ if(!Number.isFinite(months))return '경과 미정';
+ if(months===0)return '+0달';
+ const sign=months<0?'−':'+',total=Math.abs(months),years=Math.floor(total/12),rest=total%12;
+ return [years?`${sign}${years}년`:'',rest?`${sign}${rest}달`:''].filter(Boolean).join(' ');
+}
+function storyClock(scenes){
+ const positions=new Map();let previous=null;
+ for(const scene of scenes){
+  const parsed=parseStoryPeriod(scenePeriod(scene));let position;
+  if(parsed.kind==='calendar')position={months:parsed.months,segment:'calendar',kind:parsed.kind};
+  else if(parsed.kind==='relative'&&previous)position={months:previous.months+parsed.months,segment:previous.segment,kind:parsed.kind};
+  else position={months:parsed.kind==='relative'?parsed.months:0,segment:'relative:'+scene.id,kind:parsed.kind};
+  positions.set(scene.id,position);previous=position;
+ }
+ return positions;
+}
+function characterInScene(character,scene){return (scene.characters||[]).includes(character.id)||codexMatches(scene.text||'',character).length>0}
+function storyAgeContext(){
+ if(storyAgeCache)return storyAgeCache;
+ const scenes=orderedSceneIds().map(id=>state.scenes[id]),clock=storyClock(scenes),first=new Map(),present=new Map();
+ for(const scene of scenes){const ids=[...(scene.characters||[])];for(const c of state.characters){if(characterInScene(c,scene)){if(!ids.includes(c.id))ids.push(c.id);if(!first.has(c.id))first.set(c.id,scene.id)}}present.set(scene.id,ids)}
+ return storyAgeCache={scenes,clock,first,present};
+}
+function sceneCharacterIds(scene){return storyAgeContext().present.get(scene.id)||scene.characters||[]}
+function relativeStoryLabel(scene){
+ const {scenes,clock}=storyAgeContext(),current=clock.get(scene.id),beginning=clock.get(scenes[0]?.id);
+ if(!current||!beginning||current.segment!==beginning.segment)return null;
+ return elapsedPeriod(current.months-(beginning.kind==='relative'?0:beginning.months));
+}
+function characterAgeLabel(charId,scene){
+ const character=charById(charId);if(!character)return '';
+ const {scenes,clock,first}=storyAgeContext(),current=clock.get(scene.id);
+ const start=clock.get(first.get(charId));
+ if(!current)return '시점 미정';
+ if(current.kind==='calendar'){
+  const specified=character.firstYear!==null&&character.firstYear!==undefined&&String(character.firstYear).trim()!==''?Number(character.firstYear):NaN;
+  const origin=Number.isInteger(specified)&&specified>0?specified*12:start?.segment==='calendar'?start.months:null;
+  if(origin===null)return '첫등장 연도 미정';
+  if(character.baseAge==null||String(character.baseAge).trim()==='')return '첫등장 나이 미정';
+  const ageMonths=Number(character.baseAge)*12+current.months-origin;
+  if(!Number.isFinite(ageMonths)||ageMonths<0)return '나이 확인 필요';
+  const years=Math.floor(ageMonths/12),months=ageMonths%12;
+  return `${years}세${months?' '+months+'개월':''}`;
+ }
+ if(current.kind==='unknown')return '경과 미정';
+ const beginning=clock.get(scenes[0]?.id);
+ if(!beginning||beginning.segment!==current.segment)return '경과 기준 미정';
+ return elapsedPeriod(current.months-(beginning.kind==='relative'?0:beginning.months));
+}
+
+function ageText(scene){return sceneCharacterIds(scene).map(id=>escapeHtml(charById(id)?.name||'알 수 없는 인물')+' ('+escapeHtml(characterAgeLabel(id,scene))+')').join(' · ')}
+function characterNames(scene){return sceneCharacterIds(scene).map(id=>charById(id)?.name).filter(Boolean).join(' · ')}
 function preview(t,n=70){const x=(t||'').replace(/\s+/g,' ').trim();return x.length>n?x.slice(0,n)+'…':x}
 function chapterForScene(id){for(const act of state.acts)for(const ch of act.chapters)if(ch.scenes.includes(id))return ch;return null}
 function actForChapter(id){return state.acts.find(a=>a.chapters.some(c=>c.id===id))}
@@ -407,7 +473,7 @@ function addStructure(kind,parentId){
   state.scenes[sceneId]=scene;save();renderAll();
 }
 
-function renderMatrix(){const chars=state.characters;const cols=`150px repeat(${chars.length}, minmax(200px,1fr))`;let html=`<div class="matrix-wrap"><div class="matrix-grid" style="grid-template-columns:${cols}"><div class="mcell mhead"></div>${chars.map(c=>`<div class="mcell mhead"><div class="avatar">${c.avatar}</div><div><b>${c.name}</b>${c.baseAge==null?'':`<div style="font-size:9px;color:#888">첫등장 ${c.baseAge}세</div>`}</div></div>`).join('')}`;for(const id of orderedSceneIds()){const s=state.scenes[id];if(!matches(s))continue;const ch=chapterForScene(id),act=episodeForCard(ch.id);html+=`<div class="mcell rowlabel"><b>${act?.title||''} · ${ch.title}</b><br>${s.title}<br><span style="color:#999">${escapeHtml(scenePeriodLabel(s))} · ${s.time}</span></div>`;for(const c of chars){html+=`<div class="mcell">${s.characters.includes(c.id)?`<div class="matrix-card" data-open-scene="${s.id}"><b>${s.title} · ${escapeHtml(scenePeriodLabel(s))}</b><p>${preview(s.text,50)}</p>${ageAt(c.id,s.year)==null?'':`<div class="chip" style="display:inline-block;margin-top:5px">첫등장 ${ageAt(c.id)}세</div>`}</div>`:''}</div>`}}html+='</div></div>';$('#matrixMode').innerHTML=window.cleanLibraryTemplate(html)}
+function renderMatrix(){const chars=state.characters;const cols=`150px repeat(${chars.length}, minmax(200px,1fr))`;let html=`<div class="matrix-wrap"><div class="matrix-grid" style="grid-template-columns:${cols}"><div class="mcell mhead"></div>${chars.map(c=>`<div class="mcell mhead"><div class="avatar">${c.avatar}</div><div><b>${c.name}</b>${c.baseAge==null?'':`<div style="font-size:9px;color:#888">첫등장 ${c.baseAge}세</div>`}</div></div>`).join('')}`;for(const id of orderedSceneIds()){const s=state.scenes[id];if(!matches(s))continue;const ch=chapterForScene(id),act=episodeForCard(ch.id);html+=`<div class="mcell rowlabel"><b>${act?.title||''} · ${ch.title}</b><br>${s.title}<br><span style="color:#999">${escapeHtml(scenePeriodLabel(s))} · ${s.time}</span></div>`;for(const c of chars){html+=`<div class="mcell">${sceneCharacterIds(s).includes(c.id)?`<div class="matrix-card" data-open-scene="${s.id}"><b>${s.title} · ${escapeHtml(scenePeriodLabel(s))}</b><p>${preview(s.text,50)}</p><div class="chip" style="display:inline-block;margin-top:5px">${escapeHtml(characterAgeLabel(c.id,s))}</div></div>`:''}</div>`}}html+='</div></div>';$('#matrixMode').innerHTML=window.cleanLibraryTemplate(html)}
 function renderOutline(){
   let html='<div class="outline">';
   for(const act of state.acts){
@@ -425,14 +491,17 @@ function renderOutline(){
 }
 function renderTimeline(){
  const scenes=orderedSceneIds().map(id=>state.scenes[id]).filter(matches);
- $('#timelineMode').innerHTML=`<div class="timeline"><div class="timeline-note">시점은 선택 사항입니다. ‘첫 등장’, ‘1달 뒤’, ‘1년 뒤’처럼 자유롭게 적으세요. 장면 순서대로 표시하며 상대 시점을 자동으로 합산하지 않습니다.</div>${scenes.map(scene=>{const ch=chapterForScene(scene.id),act=episodeForCard(ch.id);return `<section class="year-block"><div class="year-label"><h2>${escapeHtml(scenePeriodLabel(scene))}</h2></div><div class="timeline-list"><article class="timeline-card" data-open-scene="${escapeAttr(scene.id)}"><div><h3>${escapeHtml(act?.title||'')} · ${escapeHtml(ch.title)} · ${escapeHtml(scene.title)}</h3><p>${escapeHtml(preview(scene.text,95))}</p><div class="timeline-age">${escapeHtml(scene.time)} · ${escapeHtml(scene.location)}<br>${ageText(scene)}</div></div><div class="year-edit"><input type="text" value="${escapeAttr(scenePeriod(scene))}" data-period-input="${escapeAttr(scene.id)}" aria-label="${escapeAttr(scene.title)} 시점" placeholder="시점 미정 / 예: 1달 뒤"></div></article></div></section>`}).join('')}</div>`;
+ $('#timelineMode').innerHTML=`<div class="timeline"><div class="timeline-note">연도 입력 시 나이를 계산합니다. ‘1년 뒤’, ‘+2달’은 이전 장면에서 누적하며, 연도가 없는 장면은 이야기 시작부터 경과 시간을 표시합니다. 중간 장면의 시점이 미정이면 이후의 누적 계산을 보류합니다. 같은 시점은 ‘같은 날’로 적으세요.</div>${scenes.map(scene=>{const ch=chapterForScene(scene.id),act=episodeForCard(ch.id);return `<section class="year-block"><div class="year-label"><h2>${escapeHtml(scenePeriodLabel(scene))}</h2></div><div class="timeline-list"><article class="timeline-card" data-open-scene="${escapeAttr(scene.id)}"><div><h3>${escapeHtml(act?.title||'')} · ${escapeHtml(ch.title)} · ${escapeHtml(scene.title)}</h3><p>${escapeHtml(preview(scene.text,95))}</p><div class="timeline-age">${escapeHtml(scene.time)} · ${escapeHtml(scene.location)}<br>${ageText(scene)}</div></div><div class="year-edit"><input type="text" value="${escapeAttr(scenePeriod(scene))}" data-period-input="${escapeAttr(scene.id)}" aria-label="${escapeAttr(scene.title)} 시점" placeholder="시점 미정 / 예: 1달 뒤"></div></article></div></section>`}).join('')}</div>`;
 }
-function renderAllPlan(){renderGrid();renderMatrix();renderOutline();renderTimeline();bindSceneOpeners();bindTimelineEditors();bindHierarchyTitleInputs()}
+function renderAllPlan(){storyAgeCache=null;renderGrid();renderMatrix();renderOutline();renderTimeline();bindSceneOpeners();bindTimelineEditors();bindHierarchyTitleInputs()}
 function bindSceneOpeners(){$$('[data-open-scene]').forEach(el=>el.addEventListener('click',e=>{if(e.target.closest('.year-edit'))return;openScene(el.dataset.openScene)}))}
 function setScenePeriod(id,value){state.scenes[id].timelineLabel=value.trim();save();renderAllPlan();}
-function bindTimelineEditors(){$$('[data-period-input]').forEach(input=>{input.addEventListener('input',()=>{state.scenes[input.dataset.periodInput].timelineLabel=input.value.trim();scheduleSave()});input.addEventListener('change',e=>{e.stopPropagation();setScenePeriod(input.dataset.periodInput,input.value)})})}
+function bindTimelineEditors(){$$('[data-period-input]').forEach(input=>{input.addEventListener('input',()=>{state.scenes[input.dataset.periodInput].timelineLabel=input.value.trim();scheduleSave();refreshTimelineClock()});input.addEventListener('change',e=>{e.stopPropagation();setScenePeriod(input.dataset.periodInput,input.value)})})}
+function refreshTimelineClock(){
+ $$('#timelineMode [data-open-scene]').forEach(card=>{const scene=state.scenes[card.dataset.openScene];card.closest('.year-block').querySelector('.year-label h2').textContent=scenePeriodLabel(scene);card.querySelector('.timeline-age').innerHTML=escapeHtml(scene.time)+' · '+escapeHtml(scene.location)+'<br>'+ageText(scene)});
+}
 function setActiveMode(mode){currentMode=mode;$$('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));['grid','matrix','outline','timeline'].forEach(m=>$('#'+m+'Mode').classList.toggle('hidden',m!==mode))}
-$$('[data-mode]').forEach(b=>b.addEventListener('click',()=>setActiveMode(b.dataset.mode)));$('#sceneSearch').addEventListener('input',e=>{searchQuery=e.target.value;renderAllPlan()});
+$$('[data-mode]').forEach(b=>b.addEventListener('click',()=>{renderAllPlan();setActiveMode(b.dataset.mode)}));$('#sceneSearch').addEventListener('input',e=>{searchQuery=e.target.value;renderAllPlan()});
 
 function currentWriteScene(){
   return state.scenes[currentSceneId]||state.scenes[(allCards().find(c=>c.id===currentChapterId)?.scenes||[])[0]]||null
@@ -530,8 +599,8 @@ function renderWriteChapter(chapterId,focusId){
 }
 function escapeHtml(s){return String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]))}
 function setActiveScene(id){if(!state.scenes[id])return;const changed=currentSceneId!==id;currentSceneId=id;$$('[data-write-scene]').forEach(sec=>sec.classList.toggle('active-scene',sec.dataset.writeScene===id));if(changed||!$('#infoForm').children.length)renderInfo(id);updateWriteNavLabel()}
-function renderInfo(id){const s=normalizeScene(state.scenes[id]);$('#infoForm').innerHTML=`<div class="field"><label>POV</label><input id="infoPov" value="${escapeAttr(s.pov)}"></div><div class="field"><label for="infoPeriod">시점 (선택)</label><input id="infoPeriod" type="text" value="${escapeAttr(scenePeriod(s))}" placeholder="미정 / 첫 등장 / 1달 뒤 / 1년 뒤"><div class="age-note">연도를 정하지 않아도 됩니다. 어떤 사건 기준인지 함께 적을 수도 있습니다.</div></div><div class="field"><label>시간</label><input id="infoTime" value="${escapeAttr(s.time)}"></div><div class="field"><label>장소</label><input id="infoLocation" value="${escapeAttr(s.location)}"></div><div class="field"><label>등장인물의 나이</label><div class="readonly" id="infoAges">${ageText(s)}</div><div class="age-note">인물에 등록한 첫등장 나이입니다. 시점 문구로 나이를 자동 계산하지 않습니다.</div></div><div class="field"><label>등장인물</label><div class="readonly">${characterNames(s)}</div></div><div class="field"><label>장면 목표</label><textarea id="infoGoal">${escapeHtml(s.goal)}</textarea></div><div class="field"><label>메모</label><textarea id="infoNotes">${escapeHtml(s.notes)}</textarea></div>`;
-$('#infoPeriod').addEventListener('input',e=>{s.timelineLabel=e.target.value.trim();save();renderAllPlan()});
+function renderInfo(id){storyAgeCache=null;const s=normalizeScene(state.scenes[id]);$('#infoForm').innerHTML=`<div class="field"><label>POV</label><input id="infoPov" value="${escapeAttr(s.pov)}"></div><div class="field"><label for="infoPeriod">시점 (선택)</label><input id="infoPeriod" type="text" value="${escapeAttr(scenePeriod(s))}" placeholder="미정 / 첫 등장 / 1달 뒤 / 1년 뒤"><div class="age-note">연도를 정하지 않아도 됩니다. 어떤 사건 기준인지 함께 적을 수도 있습니다.</div></div><div class="field"><label>시간</label><input id="infoTime" value="${escapeAttr(s.time)}"></div><div class="field"><label>장소</label><input id="infoLocation" value="${escapeAttr(s.location)}"></div><div class="field"><label>등장인물의 나이</label><div class="readonly" id="infoAges">${ageText(s)}</div><div class="age-note">연도 입력 시 첫등장 나이에서 경과 시간을 더합니다(생일 미반영). 연도 없이 입력하면 이야기 시작 기준 +1년 +2달처럼 표시합니다.</div></div><div class="field"><label>등장인물</label><div class="readonly">${characterNames(s)}</div></div><div class="field"><label>장면 목표</label><textarea id="infoGoal">${escapeHtml(s.goal)}</textarea></div><div class="field"><label>메모</label><textarea id="infoNotes">${escapeHtml(s.notes)}</textarea></div>`;
+$('#infoPeriod').addEventListener('input',e=>{s.timelineLabel=e.target.value.trim();save();renderAllPlan();$('#infoAges').innerHTML=ageText(s)});
 [['#infoPov','pov'],['#infoTime','time'],['#infoLocation','location']].forEach(([sel,key])=>$(sel).addEventListener('input',e=>{s[key]=e.target.value;save();if(key==='location')renderSidebar();const head=document.querySelector(`[data-write-scene="${id}"] h3`);if(head)head.textContent=`${s.title} · ${escapeHtml(scenePeriodLabel(s))} · ${s.time} · ${s.location} · ${ageText(s)}`;renderAllPlan()}));
 $('#infoGoal').addEventListener('input',e=>{s.goal=e.target.value;save()});$('#infoNotes').addEventListener('input',e=>{s.notes=e.target.value;save()})
 }
@@ -931,7 +1000,7 @@ function renderCharacterBody(){
  const c=codexDraft,body=$('#characterBody');
  $$('[data-character-tab]').forEach(button=>{const active=button.dataset.characterTab===codexTab;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1});body.setAttribute('aria-labelledby','characterTab-'+codexTab);
  if(codexTab==='details'){
- body.innerHTML=`<div class="character-section">${characterField('이름','name',c.name)}<div class="character-field-pair">${characterField('태그','tags',codexTerms(c.tags).join(', '),'input','쉼표로 구분하세요.')}${characterField('첫등장 나이','baseAge',c.baseAge,'number')}</div>${characterField('별칭 / 애칭','aliases',codexTerms(c.aliases).join(', '),'input','원고에서 함께 찾을 이름을 쉼표로 구분하세요.')}${characterField('설명','description',c.description||c.detail,'textarea','외모, 성격, 배경 등 인물의 특징을 적어 주세요.')}<div class="character-text-meta"><span id="characterDescriptionCount">${(c.description||c.detail||'').length}자</span></div><div id="characterCustomDetails">${(c.details||[]).map((d,i)=>`<div class="character-custom-row"><input aria-label="추가 정보 이름" data-detail-name="${i}" value="${escapeAttr(d.label||'')}" placeholder="예: 직업"><textarea aria-label="추가 정보 내용" data-detail-value="${i}">${escapeHtml(d.value||'')}</textarea><button type="button" data-detail-remove="${i}" aria-label="추가 정보 삭제">×</button></div>`).join('')}</div><button type="button" id="characterAddDetail">＋ 세부 정보 추가</button></div>`;
+ body.innerHTML=`<div class="character-section">${characterField('이름','name',c.name)}<div class="character-field-pair">${characterField('태그','tags',codexTerms(c.tags).join(', '),'input','쉼표로 구분하세요.')}${characterField('첫등장 나이','baseAge',c.baseAge,'number')}</div>${characterField('첫등장 연도 (선택)','firstYear',c.firstYear,'number','연도를 모르면 비워 두세요. 첫 등장 장면의 연도가 있으면 자동으로 사용합니다.')}${characterField('별칭 / 애칭','aliases',codexTerms(c.aliases).join(', '),'input','원고에서 함께 찾을 이름을 쉼표로 구분하세요.')}${characterField('설명','description',c.description||c.detail,'textarea','외모, 성격, 배경 등 인물의 특징을 적어 주세요.')}<div class="character-text-meta"><span id="characterDescriptionCount">${(c.description||c.detail||'').length}자</span></div><div id="characterCustomDetails">${(c.details||[]).map((d,i)=>`<div class="character-custom-row"><input aria-label="추가 정보 이름" data-detail-name="${i}" value="${escapeAttr(d.label||'')}" placeholder="예: 직업"><textarea aria-label="추가 정보 내용" data-detail-value="${i}">${escapeHtml(d.value||'')}</textarea><button type="button" data-detail-remove="${i}" aria-label="추가 정보 삭제">×</button></div>`).join('')}</div><button type="button" id="characterAddDetail">＋ 세부 정보 추가</button></div>`;
  }else if(codexTab==='research'){
  body.innerHTML=`<div class="character-subtabs"><button type="button" data-character-sub="notes" class="${codexSub==='notes'?'active':''}">메모</button><button type="button" data-character-sub="external" class="${codexSub==='external'?'active':''}">외부 자료</button></div><div class="character-section">${codexSub==='notes'?characterField('자료 메모','researchNotes',c.researchNotes,'textarea','인물 설정에 참고할 자료와 아이디어를 기록하세요.'): `<h3>외부 자료</h3><p>참고 링크를 저장합니다. 링크의 내용은 자동으로 수집하지 않습니다.</p>${(c.researchLinks||[]).map((link,i)=>`<div class="character-link-row"><input aria-label="자료 제목" data-link-title="${i}" value="${escapeAttr(link.title||'')}" placeholder="자료 제목"><input aria-label="자료 주소" data-link-url="${i}" value="${escapeAttr(link.url||'')}" placeholder="https://">${safeCharacterURL(link.url)?`<a href="${escapeAttr(safeCharacterURL(link.url))}" target="_blank" rel="noopener noreferrer">열기 ↗</a>`:''}<button type="button" data-link-remove="${i}" aria-label="자료 삭제">×</button></div>`).join('')}<button type="button" id="characterAddLink">＋ 자료 추가</button>`}</div>`;
  }else if(codexTab==='relations'){
@@ -955,7 +1024,7 @@ function highlightCharacterMentions(text,matches){
 }
 codexPanel.addEventListener('input',e=>{
  if(!codexDraft||codexBusy)return;const el=e.target,d=el.dataset,c=codexDraft;
- if(d.characterField){const key=d.characterField;c[key]=['aliases','tags','exclusions'].includes(key)?codexTerms(el.value):key==='baseAge'?(el.value===''?null:Number(el.value)):el.value;}
+ if(d.characterField){const key=d.characterField;c[key]=['aliases','tags','exclusions'].includes(key)?codexTerms(el.value):['baseAge','firstYear'].includes(key)?(el.value===''?null:Number(el.value)):el.value;}
  else if(d.characterCheck)c[d.characterCheck]=el.checked;
  else if(el.name==='characterAIContext')c.aiContext=el.value;
  else if(d.detailName!==undefined)c.details[+d.detailName].label=el.value;
