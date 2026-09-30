@@ -1227,3 +1227,4 @@
 @media(max-width:900px){.character-heading{padding:14px 18px 8px}.character-section{padding:18px}.character-popup .character-tabs button{padding:12px 8px!important;font-size:13px!important}.character-heading h2{font-size:22px}#characterPortrait{width:70px;height:70px}.character-popup{max-height:85vh!important}}
 
 #characterPopup #characterSave{background:#333;color:white;border-color:#333}.codex-entry-tags{display:inline-flex;gap:4px;margin-left:8px;flex-wrap:wrap}.codex-entry-tags small{font-size:10px;padding:2px 4px;border-radius:3px;background:#eee;color:#555}
+.year-edit input[data-period-input]{width:180px;max-width:100%;height:36px;text-align:left;padding:6px 9px}.year-label h2{overflow-wrap:anywhere;font-size:20px}.timeline-card:has([data-period-input]){grid-template-columns:minmax(0,1fr)}
