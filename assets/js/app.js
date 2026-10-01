@@ -301,12 +301,14 @@ function openChapterFromEpisodes(chId){
 }
 function renderEpisodesBrowser(){
   const list=$('#episodeListView'),cards=$('#episodeCardView');if(!list||!cards)return;
+  const toolbar=$('#episodesView .episode-browser-top');
+  if(toolbar&&!$('#infoAddEpisode')){const button=document.createElement('button');button.id='infoAddEpisode';button.type='button';button.className='behind-open';button.textContent='＋ 에피소드 추가';toolbar.insertBefore(button,$('#episodeSearch'));button.onclick=()=>addFromInfo('episode')}
   let listHtml='',cardHtml='';
   for(const act of state.acts){
     const chapters=act.chapters.filter(episodeBrowserMatches);
-    if(!chapters.length)continue;
+    if(!chapters.length&&episodeBrowserQuery)continue;
     const label=`${act.title}${act.subtitle?': '+act.subtitle:''}`;
-    listHtml+=`<section class="episode-section"><div class="episode-section-head"><b>${escapeHtml(label)}</b></div><div class="episode-list">${chapters.map(ch=>{
+    listHtml+=`<section class="episode-section"><div class="episode-section-head"><b>${escapeHtml(label)}</b><button type="button" class="behind-open" style="margin-left:auto" data-info-add-chapter="${escapeAttr(act.id)}">＋ 회차 추가</button></div><div class="episode-list">${chapters.map(ch=>{
       const wc=chapterWordCount(ch);
       const rating='—';
       const published='—';
@@ -325,7 +327,7 @@ function renderEpisodesBrowser(){
         </div>
       </article>`
     }).join('')}</div></section>`;
-    cardHtml+=`<section class="episode-section"><div class="episode-section-head"><b>${escapeHtml(label)}</b></div><div class="episode-card-grid">${chapters.map(ch=>{
+    cardHtml+=`<section class="episode-section"><div class="episode-section-head"><b>${escapeHtml(label)}</b><button type="button" class="behind-open" style="margin-left:auto" data-info-add-chapter="${escapeAttr(act.id)}">＋ 회차 추가</button></div><div class="episode-card-grid">${chapters.map(ch=>{
       const sceneRows=ch.scenes.map(id=>state.scenes[id]).filter(Boolean).map(s=>`<div class="scene-summary-item"><div class="scene-summary-name">${escapeHtml(s.title)}</div><div class="scene-summary-text">${escapeHtml(sceneSummaryForCard(s))}</div></div>`).join('');
       return `<article class="episode-card" data-open-chapter="${ch.id}">
         <div class="episode-card-head"><span class="episode-card-no">${escapeHtml(ch.title)}</span><span class="episode-card-title">${escapeHtml(chapterTitleForBrowser(ch))}</span></div>
@@ -338,8 +340,10 @@ function renderEpisodesBrowser(){
   cards.innerHTML=cardHtml||'<div style="padding:24px;color:#999;font-size:12px">검색 결과가 없습니다.</div>';
   $$('[data-open-chapter]').forEach(el=>el.addEventListener('click',e=>{if(!e.target.closest('[data-behind-open]'))openChapterFromEpisodes(el.dataset.openChapter)}));
   $$('[data-behind-open]').forEach(button=>button.addEventListener('click',e=>{e.stopPropagation();openBehind(button.dataset.behindOpen)}));
+  $$('[data-info-add-chapter]').forEach(button=>button.onclick=()=>addFromInfo('chapter',button.dataset.infoAddChapter));
   setEpisodeBrowserView(currentEpisodeBrowserView);
 }
+function addFromInfo(kind,parentId){if(!flushSave())return;episodeBrowserQuery='';$('#episodeSearch').value='';addStructure(kind,parentId)}
 function setEpisodeBrowserView(view){
   currentEpisodeBrowserView=view;
   $$('[data-episode-view]').forEach(b=>b.classList.toggle('active',b.dataset.episodeView===view));
