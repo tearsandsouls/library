@@ -1228,3 +1228,14 @@
 
 #characterPopup #characterSave{background:#333;color:white;border-color:#333}.codex-entry-tags{display:inline-flex;gap:4px;margin-left:8px;flex-wrap:wrap}.codex-entry-tags small{font-size:10px;padding:2px 4px;border-radius:3px;background:#eee;color:#555}
 .year-edit input[data-period-input]{width:180px;max-width:100%;height:36px;text-align:left;padding:6px 9px}.year-label h2{overflow-wrap:anywhere;font-size:20px}.timeline-card:has([data-period-input]){grid-template-columns:minmax(0,1fr)}
+
+/* Character list: portrait, name/description, right-aligned tags. */
+.side-scroll-v45 [data-character-id].entry{align-items:center;min-height:88px;box-sizing:border-box;padding:14px 12px!important;gap:12px!important;border-bottom:1px solid #ededf0}
+.side-scroll-v45 [data-character-id] .avatar{width:52px!important;height:52px!important;flex:0 0 52px;border-radius:17px;background-position:center;background-size:cover;font-size:22px}
+.side-scroll-v45 [data-character-id] .codex-entry-content{flex:1;min-width:0}
+.side-scroll-v45 [data-character-id] .codex-entry-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.side-scroll-v45 [data-character-id] .codex-entry-heading b{font-size:15px!important;color:#506078;line-height:1.5;overflow-wrap:anywhere;min-width:0}
+.side-scroll-v45 [data-character-id] .codex-entry-tags{margin:0 0 0 auto;justify-content:flex-end;gap:4px;max-width:60%;flex-shrink:0}
+.side-scroll-v45 [data-character-id] .codex-entry-tags small{font-size:12px;line-height:1.5;padding:2px 6px;background:#f0f0f2;color:#303036;border-radius:5px;overflow-wrap:anywhere;max-width:100%}
+.side-scroll-v45 [data-character-id] .codex-entry-content p{font-size:13px!important;line-height:1.55;color:#62636e;margin:6px 0 0;max-width:none;white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.side-scroll-v45 [data-character-id] .codex-entry-content p:empty{display:none}
