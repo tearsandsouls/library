@@ -951,6 +951,21 @@ function codexMatches(text,character){
  const excluded=[];for(const phrase of codexTerms(character.exclusions)){const needle=fold(phrase);let pos=0;while((pos=hay.indexOf(needle,pos))!==-1){excluded.push([pos,pos+needle.length]);pos+=needle.length}}
  const matches=[];for(let pos=0;pos<hay.length;){const term=terms.find(t=>hay.startsWith(t,pos)&&!excluded.some(([a,b])=>pos<b&&pos+t.length>a));if(term){matches.push([pos,pos+term.length]);pos+=term.length}else pos++}return matches;
 }
+function codexMentionExcerpts(text,matches,context=80){
+ text=String(text||'');const windows=[];
+ for(const [a,b] of matches){
+  let start=Math.max(0,a-context),end=Math.min(text.length,b+context);
+  const before=text.slice(start,a),after=text.slice(b,end);
+  const leftBreaks=[...before.matchAll(/\n/g)].map(m=>start+m.index);
+  const rightBreaks=[...after.matchAll(/\n/g)].map(m=>b+m.index);
+  if(leftBreaks.length>2)start=leftBreaks[leftBreaks.length-3]+1;
+  if(rightBreaks.length>2)end=rightBreaks[2];
+  if(start>0&&/[\uDC00-\uDFFF]/.test(text[start]))start--;
+  if(end<text.length&&/[\uDC00-\uDFFF]/.test(text[end]))end++;
+  const previous=windows.at(-1);if(previous&&start<=previous[1])previous[1]=Math.max(previous[1],end);else windows.push([start,end]);
+ }
+ return windows.map(([start,end])=>({text:text.slice(start,end),leading:start>0,trailing:end<text.length,matches:matches.filter(([a,b])=>a>=start&&b<=end).map(([a,b])=>[a-start,b-start])}));
+}
 /* End character mention helpers. */
 let codexDraft=null,codexDirty=false,codexBusy=false,codexTab='details',codexSub='notes',codexPinned=false,codexOpener=null,codexPortraitFile=null,codexPortraitURL=null,codexLoadToken=0;
 const codexPanel=document.createElement('section');
@@ -1016,7 +1031,7 @@ function renderCharacterBody(){
  }else if(codexTab==='mentions'){
  const source=['manuscript','summaries','codex','snippets'].includes(codexSub)?codexSub:'manuscript';codexSub=source;
  const items=characterMentions(source);
- body.innerHTML=`<div class="character-subtabs">${[['manuscript','원고'],['summaries','장면 메모'],['codex','설정집'],['snippets','작품 메모']].map(([id,label])=>`<button type="button" data-character-sub="${id}" class="${id===source?'active':''}">${label} <small>${characterMentions(id).reduce((n,s)=>n+s.matches.length,0)}</small></button>`).join('')}</div>${items.map(item=>`<article class="character-mention"><header><strong>${escapeHtml(item.label)}</strong><span>${item.matches.length}회</span>${item.id?`<button type="button" data-character-scene="${escapeAttr(item.id)}">장면 열기 ↗</button>`:''}</header><p>${highlightCharacterMentions(item.text,item.matches)}</p></article>`).join('')||`<p class="character-empty">${c.tracking===false?'이름 추적이 꺼져 있습니다. 추적 설정에서 켜 주세요.':'이름이나 별칭이 언급된 내용이 없습니다.'}</p>`}`;
+ body.innerHTML=`<div class="character-subtabs">${[['manuscript','원고'],['summaries','장면 메모'],['codex','설정집'],['snippets','작품 메모']].map(([id,label])=>`<button type="button" data-character-sub="${id}" class="${id===source?'active':''}">${label} <small>${characterMentions(id).reduce((n,s)=>n+s.matches.length,0)}</small></button>`).join('')}</div>${items.map(item=>`<article class="character-mention"><header><strong>${escapeHtml(item.label)}</strong><span>${item.matches.length}회</span>${item.id?`<button type="button" data-character-scene="${escapeAttr(item.id)}">장면 열기 ↗</button>`:''}</header>${codexMentionExcerpts(item.text,item.matches).map(excerpt=>`<p>${excerpt.leading?'…':''}${highlightCharacterMentions(excerpt.text,excerpt.matches)}${excerpt.trailing?'…':''}</p>`).join('')}</article>`).join('')||`<p class="character-empty">${c.tracking===false?'이름 추적이 꺼져 있습니다. 추적 설정에서 켜 주세요.':'이름이나 별칭이 언급된 내용이 없습니다.'}</p>`}`;
  }else{
  body.innerHTML=`<div class="character-section"><h3>이름 추적 / 일치 설정</h3><label class="character-check"><input type="checkbox" data-character-check="tracking" ${c.tracking!==false?'checked':''}> 이름과 별칭으로 언급을 찾습니다.</label><label class="character-check"><input type="checkbox" data-character-check="caseSensitive" ${c.caseSensitive?'checked':''}> 영문 이름과 별칭의 대소문자를 구분합니다.</label>${characterField('제외할 문구','exclusions',codexTerms(c.exclusions).join(', '),'input','이 문구 안에 포함된 이름은 언급으로 세지 않습니다. 쉼표로 구분하세요.')}</div><div class="character-section"><h3>AI 참고 정보</h3><p class="character-notice">현재 AI 연동은 없습니다. 아래 선택은 인물의 참고 정보 사용 설정으로만 저장됩니다.</p>${[['always','항상 포함','AI가 참고할 정보에 항상 포함합니다.'],['detected','이름이 감지되면 포함 (기본)','본문에서 이름이나 별칭을 찾았을 때 포함합니다.'],['manual','직접 선택할 때만 포함','자동으로 포함하지 않고 직접 선택할 때만 사용합니다.'],['never','포함하지 않음','AI가 참고하는 정보에서 제외합니다.']].map(([id,label,hint])=>`<label class="character-radio"><input type="radio" name="characterAIContext" value="${id}" ${(c.aiContext||'detected')===id?'checked':''}><span>${label}<small>${hint}</small></span></label>`).join('')}</div>`;
  }
