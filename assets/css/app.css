@@ -1260,6 +1260,12 @@
 #writeView .write-scene-subtitle{width:100%;font-family:Georgia,"Noto Serif KR",serif;font-style:italic;font-size:22px;font-weight:700;padding:4px 0}
 #writeView input[data-write-heading]:focus,#writeView .write-scene-subtitle:focus{box-shadow:0 1px 0 #aaa;background:#fafafa}
 #writeView .editor{width:820px;min-width:820px;max-width:820px;padding:0 0 12px;font-size:20px;line-height:2.1}
-#writeView .info{margin-top:306px}
+#writeView .info{position:relative;top:auto;margin-top:0;padding-top:0;border-top:0}
 .focus-writing #writeView .write{width:860px;min-width:860px;grid-template-columns:820px}
 .character-mention p{padding:0;line-height:1.9}.character-mention p+p{padding-top:0;margin-top:0}
+
+#writeView .scene{position:relative}
+#writeView .scene.without-subtitle .scene-doc-head{position:absolute;top:-30px;left:0;width:100%;padding:0;height:26px}
+#writeView .scene.without-subtitle .write-scene-subtitle{font-size:13px;height:26px;padding:2px 0;opacity:0}
+#writeView .scene.without-subtitle:hover .write-scene-subtitle,#writeView .scene.without-subtitle .write-scene-subtitle:focus{opacity:1}
+#writeView .info>h3{margin-top:0}
