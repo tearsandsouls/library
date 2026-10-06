@@ -621,16 +621,17 @@ function alignWriteSceneInfo(){
 window.addEventListener('resize',()=>requestAnimationFrame(alignWriteSceneInfo));
 function setActiveScene(id){if(!state.scenes[id])return;const changed=currentSceneId!==id;currentSceneId=id;$$('[data-write-scene]').forEach(sec=>sec.classList.toggle('active-scene',sec.dataset.writeScene===id));if(changed||!$('#infoForm').children.length)renderInfo(id);updateWriteNavLabel();alignWriteSceneInfo()}
 function writingProportion(sceneId){
- const ids=[...new Set(orderedSceneIds())];
- const count=id=>Array.from(String(state.scenes[id]?.text||'').replace(/\s/g,'')).length;
- const total=ids.reduce((sum,id)=>sum+count(id),0),current=ids.includes(sceneId)?count(sceneId):0;
- return {current,total,percent:total?current/total*100:0};
+ const chapter=chapterForScene(sceneId);
+ const ids=[...new Set(chapter?.scenes||[])];
+ const current=ids.reduce((sum,id)=>sum+Array.from(String(state.scenes[id]?.text||'').replace(/\s/g,'')).length,0);
+ const total=5000;
+ return {current,total,percent:current/total*100};
 }
 function updateWriteProportion(){
  const el=$('#writeProportion');if(!el)return;const {current,total,percent}=writingProportion(currentSceneId);
  el.textContent=`${percent.toFixed(1)}% · ${current.toLocaleString('ko-KR')} / ${total.toLocaleString('ko-KR')}자`;
 }
-function renderInfo(id){storyAgeCache=null;const s=normalizeScene(state.scenes[id]);$('#infoForm').innerHTML=`<div class="field"><label>소설 전체 중 현재 씬 비율</label><div class="readonly" id="writeProportion"></div><div class="age-note">공백 제외 본문 글자 수 기준 · 비하인드 제외</div></div><div class="field"><label>POV</label><input id="infoPov" value="${escapeAttr(s.pov)}"></div><div class="field"><label for="infoPeriod">시점 (선택)</label><input id="infoPeriod" type="text" value="${escapeAttr(scenePeriod(s))}" placeholder="미정 / 첫 등장 / 1달 뒤 / 1년 뒤"><div class="age-note">연도를 정하지 않아도 됩니다. 어떤 사건 기준인지 함께 적을 수도 있습니다.</div></div><div class="field"><label>시간</label><input id="infoTime" value="${escapeAttr(s.time)}"></div><div class="field"><label>장소</label><input id="infoLocation" value="${escapeAttr(s.location)}"></div><div class="field"><label>등장인물의 나이</label><div class="readonly" id="infoAges">${ageText(s)}</div><div class="age-note">연도 입력 시 첫등장 나이에서 경과 시간을 더합니다(생일 미반영). 연도 없이 입력하면 이야기 시작 기준 +1년 +2달처럼 표시합니다.</div></div><div class="field"><label>등장인물</label><div class="readonly">${characterNames(s)}</div></div><div class="field"><label>장면 목표</label><textarea id="infoGoal">${escapeHtml(s.goal)}</textarea></div><div class="field"><label>메모</label><textarea id="infoNotes">${escapeHtml(s.notes)}</textarea></div>`;
+function renderInfo(id){storyAgeCache=null;const s=normalizeScene(state.scenes[id]);$('#infoForm').innerHTML=`<div class="field"><label>현재 회차 목표 달성률</label><div class="readonly" id="writeProportion"></div><div class="age-note">회차 내 모든 씬 합산 · 목표 5,000자 · 공백·비하인드 제외</div></div><div class="field"><label>POV</label><input id="infoPov" value="${escapeAttr(s.pov)}"></div><div class="field"><label for="infoPeriod">시점 (선택)</label><input id="infoPeriod" type="text" value="${escapeAttr(scenePeriod(s))}" placeholder="미정 / 첫 등장 / 1달 뒤 / 1년 뒤"><div class="age-note">연도를 정하지 않아도 됩니다. 어떤 사건 기준인지 함께 적을 수도 있습니다.</div></div><div class="field"><label>시간</label><input id="infoTime" value="${escapeAttr(s.time)}"></div><div class="field"><label>장소</label><input id="infoLocation" value="${escapeAttr(s.location)}"></div><div class="field"><label>등장인물의 나이</label><div class="readonly" id="infoAges">${ageText(s)}</div><div class="age-note">연도 입력 시 첫등장 나이에서 경과 시간을 더합니다(생일 미반영). 연도 없이 입력하면 이야기 시작 기준 +1년 +2달처럼 표시합니다.</div></div><div class="field"><label>등장인물</label><div class="readonly">${characterNames(s)}</div></div><div class="field"><label>장면 목표</label><textarea id="infoGoal">${escapeHtml(s.goal)}</textarea></div><div class="field"><label>메모</label><textarea id="infoNotes">${escapeHtml(s.notes)}</textarea></div>`;
 updateWriteProportion();
 $('#infoPeriod').addEventListener('input',e=>{s.timelineLabel=e.target.value.trim();save();renderAllPlan();$('#infoAges').innerHTML=ageText(s)});
 [['#infoPov','pov'],['#infoTime','time'],['#infoLocation','location']].forEach(([sel,key])=>$(sel).addEventListener('input',e=>{s[key]=e.target.value;save();if(key==='location')renderSidebar();const head=document.querySelector(`[data-write-scene="${id}"] h3`);if(head)head.textContent=`${s.title} · ${escapeHtml(scenePeriodLabel(s))} · ${s.time} · ${s.location} · ${ageText(s)}`;renderAllPlan()}));
