@@ -166,7 +166,7 @@ function migrateHierarchyTitles(){
   for(const act of state.acts){
     for(const ch of act.chapters){
       const ct=(ch.title||'').trim();
-      if(!ct || /^Chapter\b/i.test(ct) || /^에피소드\s*\d+$/i.test(ct)) ch.title=String(n).padStart(3,'0');
+      if(!ch.titleEdited && (!ct || /^Chapter\b/i.test(ct) || /^에피소드\s*\d+$/i.test(ct))) ch.title=String(n).padStart(3,'0');
       n++;
     }
   }
@@ -186,7 +186,7 @@ function updateEpisodeGroupSubtitle(id,value){
 }
 function updateCardTitle(id,value){
   const ch=allCards().find(x=>x.id===id); if(!ch)return;
-  ch.title=(value||'').trim()||'000';
+  ch.title=(value||'').trim()||'000';ch.titleEdited=true;
   save(); renderAllPlan(); renderGallery();
   if(currentChapterId===id && !$('#writeView').classList.contains('hidden')) renderWriteChapter(id,currentSceneId);
 }
@@ -401,7 +401,7 @@ const savedRanges={};
 function rememberRange(sceneId){const sel=window.getSelection();if(!sel||!sel.rangeCount)return;const ed=document.querySelector(`[data-editor="${sceneId}"]`);if(ed&&ed.contains(sel.anchorNode))savedRanges[sceneId]=sel.getRangeAt(0).cloneRange()}
 function inlineHtml(m){if(m.type==='video')return `<figure class="inline-figure" contenteditable="false" data-inline-media="${m.id}"><video class="inline-video" controls preload="metadata" data-media-id="${m.id}"></video><figcaption>${escapeHtml(m.name||'동영상')}</figcaption></figure><p><br></p>`;return `<figure class="inline-figure" contenteditable="false" data-inline-media="${m.id}"><img class="inline-media" data-media-id="${m.id}" alt=""><figcaption>${escapeHtml(m.name||'삽화')}</figcaption></figure><p><br></p>`}
 function insertMediaHtml(sceneId,m,range){const ed=document.querySelector(`[data-editor="${sceneId}"]`);if(!ed)return;ed.focus();let r=range||savedRanges[sceneId];if(!r||!ed.contains(r.commonAncestorContainer)){r=document.createRange();r.selectNodeContents(ed);r.collapse(false)}const temp=document.createElement('div');temp.innerHTML=inlineHtml(m);const frag=document.createDocumentFragment();let node,last;while((node=temp.firstChild)){last=frag.appendChild(node)}r.deleteContents();r.insertNode(frag);if(last){r.setStartAfter(last);r.collapse(true);const sel=window.getSelection();sel.removeAllRanges();sel.addRange(r);savedRanges[sceneId]=r.cloneRange()}syncEditor(sceneId)}
-function syncEditor(sceneId){const ed=document.querySelector(`[data-editor="${sceneId}"]`);const s=state.scenes[sceneId];if(!ed||!s)return;s.bodyHtml=sanitizeStoredHtml(ed.innerHTML);s.text=ed.innerText;scheduleSave()}
+function syncEditor(sceneId){const ed=document.querySelector(`[data-editor="${sceneId}"]`);const s=state.scenes[sceneId];if(!ed||!s)return;s.bodyHtml=sanitizeStoredHtml(ed.innerHTML);s.text=ed.innerText;scheduleSave();updateWriteProportion()}
 function caretRangeAtPoint(ed,x,y){
   let r=null;
   if(document.caretRangeFromPoint){r=document.caretRangeFromPoint(x,y)}
@@ -592,7 +592,10 @@ function renderWriteChapter(chapterId,focusId){
   }).join('');
   $$('[data-editor]').forEach(ed=>{const id=ed.dataset.editor;ed.addEventListener('click',e=>{if(!e.target.closest('[data-inline-media]'))clearSelectedInlineMedia()});['click','keyup','mouseup','focus'].forEach(ev=>ed.addEventListener(ev,()=>{setActiveScene(id);rememberRange(id)}));ed.addEventListener('input',()=>syncEditor(id));ed.addEventListener('blur',()=>{syncEditor(id);save();renderAllPlan();renderGallery()})});
   bindMediaControls();
-  $$('[data-write-heading]').forEach(input=>input.addEventListener('input',()=>{const key=input.dataset.writeHeading;if(key==='episode')act.title=input.value;else if(key==='subtitle')act.subtitle=input.value;else ch.title=input.value;scheduleSave();renderEpisodesBrowser();renderAllPlan();renderWriteChapterMenu();updateWriteNavLabel()}));
+  $$('[data-write-heading]').forEach(input=>{
+    const commit=()=>{const current=allCards().find(c=>c.id===ch.id),parent=episodeForCard(ch.id);if(!current||!parent)return;const key=input.dataset.writeHeading;if(key==='episode')parent.title=input.value;else if(key==='subtitle')parent.subtitle=input.value;else{current.title=input.value;current.titleEdited=true}save();renderEpisodesBrowser();renderAllPlan();renderWriteChapterMenu();updateWriteNavLabel()};
+    input.addEventListener('input',commit);input.addEventListener('change',commit);input.addEventListener('blur',()=>flushSave());input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();commit();input.blur()}});
+  });
   $$('[data-write-scene-title]').forEach(input=>input.addEventListener('input',()=>{state.scenes[input.dataset.writeSceneTitle].title=input.value;scheduleSave();renderEpisodesBrowser();renderAllPlan();renderGallery();renderWriteChapterMenu();updateWriteNavLabel();alignWriteSceneInfo()}));
   bindHierarchyTitleInputs();
   $$('[data-inline-media]').forEach(fig=>fig.addEventListener('click',e=>{const img=e.target.closest('img,video');if(!img)return;e.preventDefault();e.stopPropagation();selectInlineMedia(fig.dataset.inlineMedia,fig);openPromptEditor(fig.dataset.inlineMedia)}));
@@ -617,7 +620,18 @@ function alignWriteSceneInfo(){
 }
 window.addEventListener('resize',()=>requestAnimationFrame(alignWriteSceneInfo));
 function setActiveScene(id){if(!state.scenes[id])return;const changed=currentSceneId!==id;currentSceneId=id;$$('[data-write-scene]').forEach(sec=>sec.classList.toggle('active-scene',sec.dataset.writeScene===id));if(changed||!$('#infoForm').children.length)renderInfo(id);updateWriteNavLabel();alignWriteSceneInfo()}
-function renderInfo(id){storyAgeCache=null;const s=normalizeScene(state.scenes[id]);$('#infoForm').innerHTML=`<div class="field"><label>POV</label><input id="infoPov" value="${escapeAttr(s.pov)}"></div><div class="field"><label for="infoPeriod">시점 (선택)</label><input id="infoPeriod" type="text" value="${escapeAttr(scenePeriod(s))}" placeholder="미정 / 첫 등장 / 1달 뒤 / 1년 뒤"><div class="age-note">연도를 정하지 않아도 됩니다. 어떤 사건 기준인지 함께 적을 수도 있습니다.</div></div><div class="field"><label>시간</label><input id="infoTime" value="${escapeAttr(s.time)}"></div><div class="field"><label>장소</label><input id="infoLocation" value="${escapeAttr(s.location)}"></div><div class="field"><label>등장인물의 나이</label><div class="readonly" id="infoAges">${ageText(s)}</div><div class="age-note">연도 입력 시 첫등장 나이에서 경과 시간을 더합니다(생일 미반영). 연도 없이 입력하면 이야기 시작 기준 +1년 +2달처럼 표시합니다.</div></div><div class="field"><label>등장인물</label><div class="readonly">${characterNames(s)}</div></div><div class="field"><label>장면 목표</label><textarea id="infoGoal">${escapeHtml(s.goal)}</textarea></div><div class="field"><label>메모</label><textarea id="infoNotes">${escapeHtml(s.notes)}</textarea></div>`;
+function writingProportion(sceneId){
+ const ids=[...new Set(orderedSceneIds())];
+ const count=id=>Array.from(String(state.scenes[id]?.text||'').replace(/\s/g,'')).length;
+ const total=ids.reduce((sum,id)=>sum+count(id),0),current=ids.includes(sceneId)?count(sceneId):0;
+ return {current,total,percent:total?current/total*100:0};
+}
+function updateWriteProportion(){
+ const el=$('#writeProportion');if(!el)return;const {current,total,percent}=writingProportion(currentSceneId);
+ el.textContent=`${percent.toFixed(1)}% · ${current.toLocaleString('ko-KR')} / ${total.toLocaleString('ko-KR')}자`;
+}
+function renderInfo(id){storyAgeCache=null;const s=normalizeScene(state.scenes[id]);$('#infoForm').innerHTML=`<div class="field"><label>소설 전체 중 현재 씬 비율</label><div class="readonly" id="writeProportion"></div><div class="age-note">공백 제외 본문 글자 수 기준 · 비하인드 제외</div></div><div class="field"><label>POV</label><input id="infoPov" value="${escapeAttr(s.pov)}"></div><div class="field"><label for="infoPeriod">시점 (선택)</label><input id="infoPeriod" type="text" value="${escapeAttr(scenePeriod(s))}" placeholder="미정 / 첫 등장 / 1달 뒤 / 1년 뒤"><div class="age-note">연도를 정하지 않아도 됩니다. 어떤 사건 기준인지 함께 적을 수도 있습니다.</div></div><div class="field"><label>시간</label><input id="infoTime" value="${escapeAttr(s.time)}"></div><div class="field"><label>장소</label><input id="infoLocation" value="${escapeAttr(s.location)}"></div><div class="field"><label>등장인물의 나이</label><div class="readonly" id="infoAges">${ageText(s)}</div><div class="age-note">연도 입력 시 첫등장 나이에서 경과 시간을 더합니다(생일 미반영). 연도 없이 입력하면 이야기 시작 기준 +1년 +2달처럼 표시합니다.</div></div><div class="field"><label>등장인물</label><div class="readonly">${characterNames(s)}</div></div><div class="field"><label>장면 목표</label><textarea id="infoGoal">${escapeHtml(s.goal)}</textarea></div><div class="field"><label>메모</label><textarea id="infoNotes">${escapeHtml(s.notes)}</textarea></div>`;
+updateWriteProportion();
 $('#infoPeriod').addEventListener('input',e=>{s.timelineLabel=e.target.value.trim();save();renderAllPlan();$('#infoAges').innerHTML=ageText(s)});
 [['#infoPov','pov'],['#infoTime','time'],['#infoLocation','location']].forEach(([sel,key])=>$(sel).addEventListener('input',e=>{s[key]=e.target.value;save();if(key==='location')renderSidebar();const head=document.querySelector(`[data-write-scene="${id}"] h3`);if(head)head.textContent=`${s.title} · ${escapeHtml(scenePeriodLabel(s))} · ${s.time} · ${s.location} · ${ageText(s)}`;renderAllPlan()}));
 $('#infoGoal').addEventListener('input',e=>{s.goal=e.target.value;save()});$('#infoNotes').addEventListener('input',e=>{s.notes=e.target.value;save()})
